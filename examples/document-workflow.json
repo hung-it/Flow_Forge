@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "name": "document-report",
+  "nodes": [
+    {
+      "key": "validate",
+      "handler": "validate_document",
+      "inputs": {"document": {"source": "run_input", "pointer": "/document"}}
+    },
+    {
+      "key": "extract",
+      "handler": "extract_metadata",
+      "inputs": {"document": {"source": "task_output", "node": "validate", "pointer": ""}}
+    },
+    {
+      "key": "analyze",
+      "handler": "analyze_content",
+      "inputs": {"document": {"source": "task_output", "node": "validate", "pointer": ""}}
+    },
+    {
+      "key": "aggregate",
+      "handler": "aggregate",
+      "inputs": {
+        "metadata": {"source": "task_output", "node": "extract", "pointer": ""},
+        "analysis": {"source": "task_output", "node": "analyze", "pointer": ""}
+      }
+    },
+    {
+      "key": "report",
+      "handler": "generate_report",
+      "inputs": {"summary": {"source": "task_output", "node": "aggregate", "pointer": ""}}
+    }
+  ],
+  "edges": [
+    [
+      "validate",
+      "extract"
+    ],
+    [
+      "validate",
+      "analyze"
+    ],
+    [
+      "extract",
+      "aggregate"
+    ],
+    [
+      "analyze",
+      "aggregate"
+    ],
+    [
+      "aggregate",
+      "report"
+    ]
+  ]
+}

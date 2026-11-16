@@ -1,0 +1,10 @@
+{
+  "name": "flowforge-docs",
+  "private": true,
+  "scripts": {
+    "diagrams": "node -e \"require('fs').mkdirSync('../reports', {recursive:true})\" && mmdc -i ../docs/architecture/README.md -o ../reports/architecture.md -p puppeteer.json"
+  },
+  "devDependencies": {
+    "@mermaid-js/mermaid-cli": "12.2.0"
+  }
+}
