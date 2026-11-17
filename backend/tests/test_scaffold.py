@@ -30,3 +30,18 @@ def test_loop_health_requires_recent_success(monkeypatch, tmp_path):
     assert not process.healthy_loop("worker")
     path.write_text("invalid")
     assert not process.healthy_loop("worker")
+
+
+def test_health_module_does_not_import_infrastructure():
+    import subprocess
+    import sys
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; import flowforge.process; "
+            "assert 'sqlalchemy' not in sys.modules; assert 'aio_pika' not in sys.modules",
+        ],
+        check=True,
+    )

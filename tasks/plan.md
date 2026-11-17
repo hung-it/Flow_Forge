@@ -205,5 +205,3 @@ Không skip test/hạ gate; thêm domain/engine mới vào coverage khi triển 
 Chạy `./scripts/check.ps1` và `./scripts/smoke.ps1` lần lượt trên máy ít RAM.
 Evidence chi tiết: [verification.md](../docs/development/verification.md);
 checklist ngắn: [todo.md](todo.md). Reports local ở reports/ (gitignored).
-
-
