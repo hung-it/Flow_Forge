@@ -1,6 +1,7 @@
 # Kiến trúc FlowForge
 
-Trạng thái: scaffold có API health, migrations identity/guards, DAG/message validation, process lifecycle và giao diện kết nối. Engine vẫn là thiết kế đích.
+Trạng thái: API health, Auth/Projects/membership, migrations identity/sessions, DAG/message validation,
+process lifecycle và giao diện kết nối đã có code. Workflow engine và login UI vẫn chưa triển khai.
 Nguồn chính: tài liệu trong repo và [progress plan v2](../../tasks/plan.md).
 Xem [execution contracts v1](execution-contracts.md) cho DAG, handler, transaction, broker và limits.
 
@@ -177,7 +178,9 @@ Run input: version (positive integer), input (JSON object). POST run returns 202
 Errors: code, message, details, request_id. Invalid input 422, unauthenticated 401, cross-project 404, insufficient role within visible project 403.
 Auth MVP: local bootstrap-user command, no public registration, Argon2 passwords; JWT access tokens expire in 30 minutes. OWNER manages membership/workflows/runs; DEVELOPER publishes and runs; VIEWER reads. Owner membership maintained atomically.
 Message v1: schema_version, event_id, run_id, task_run_id, dispatch_generation, traceparent (optional). Task data stays in DB; consumer checks schema and current generation.
-Health endpoints are the only implemented routes now; future contracts never appear as fake working endpoints.
+Health, Auth and Projects/membership routes are implemented; workflow/run/worker routes remain planned.
+Auth now includes rotating HttpOnly refresh cookies and server-side session revocation per the accepted
+2026-11-16 plan. See [auth contracts and usage](../development/auth.md).
 
 ## Sources
 

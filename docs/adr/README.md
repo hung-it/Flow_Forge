@@ -1,5 +1,16 @@
 # Architecture decisions
 
+## ADR 005 Revocable login sessions and project authorization
+
+Accepted 2026-11-16 after user selection. Access JWT lasts 30 minutes; every protected request checks
+the DB session. Opaque refresh cookie rotates within a fixed 7-day session; only hashes/history are stored.
+Known-token replay revokes the session, including strict concurrent-refresh races; no grace window.
+Logout is session-scoped and invalidates access through DB checks. HttpOnly cookie routes require a custom
+CSRF header/JSON and checked Origin; no wildcard CORS. This adds DB reads and requires future clients to
+serialize refresh, in exchange for immediate revocation and replay detection.
+Project writes lock session then project and re-read membership after obtaining the lock. Ownership changes
+are atomic and cannot pass through a zero-owner or two-owner committed state. No generic policy framework.
+
 ## ADR 004 Contracts v1 and failure semantics
 
 Accepted 2026-11-15. Repository documents and tasks/plan.md v2 supersede the original

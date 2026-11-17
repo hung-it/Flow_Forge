@@ -73,6 +73,12 @@ This is a named disposable test project only; never substitute the development p
 Frontend lint is ESLint + React Hooks rules; typecheck is a separate TypeScript command.
 Backend contract coverage >=80%, pip-audit of pinned exported dependencies and npm high-severity
 audits are in local/CI checks. Add future engine modules to coverage; no skips/suppressions to pass.
+Auth/Projects coverage is enforced separately (>=80% each) on combined unit/PostgreSQL tests in smoke.
+The API image uses the repository root build context so tests include canonical examples. Build with
+`docker compose build api`, or `docker build -f backend/Dockerfile .` from the repository root.
+Smoke pauses idle scheduler/publisher/worker/frontend while the auth regression runs to limit memory,
+then starts them all and performs the full outage/recovery drills. No tests are skipped.
+Coverage and pytest cache data are written under /tmp in non-root containers.
 Run check.ps1 and smoke.ps1 sequentially on memory-constrained machines.
 Remote GitLab success and fresh remote clone remain pending until configuration/commit/push are completed.
 Config files alone do not prove remote CI. tasks/plan.md tracks the current evidence and pending items.

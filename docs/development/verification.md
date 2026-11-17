@@ -1,5 +1,39 @@
 # Bằng chứng nghiệm thu local
 
+## Auth + Projects API — 2026-11-16
+
+Nhánh feat/auth-projects từ commit 305f2c4; thay đổi mới chưa commit/push.
+`check.ps1` exit 0 và clean local snapshot clone/fresh uv/npm install pass (reports/clean-clone.log,
+source tree bf12d8a341a6b126e4612b42db2153ccde55ba29).
+
+Full `smoke.ps1` **exit 0**, project **ff-foundation-7d4f489fe514**:
+
+- **63 tests pass**: 35 unit + 28 PostgreSQL integration. Không skip/xfail/hạ assertion.
+- Domain coverage: **auth 98.0%, projects 86.8%, contracts 100%**; gate >=80% cho từng nhóm.
+  Đây không phải claim 100% coverage toàn bộ backend.
+- Real TCP HTTP: login/me/refresh/logout, hai user, session isolation và OWNER/VIEWER project RBAC pass.
+- Replay revokes committed session; concurrent refresh/logout/login/ownership/member requests covered.
+  Test permission race xác nhận request chờ DB project lock rồi đọc lại role sau khi được cấp khóa.
+- Cookie flags, CSRF, Origin, request limits, JWT rejection, secret redaction, duplicate bootstrap,
+  ownership guard và rollback khi membership insert bị lỗi có test.
+- Broker/DB stop-start, API live/ready semantics và recovery; SIGTERM pass.
+- Migration base/old-schema/dirty-data rejection/rollback/head, downgrade 0003 về 0002 và upgrade/repeat pass;
+  user/project/OWNER membership fixture được giữ. Chỉ chạy trên disposable volumes.
+- Log capture và cleanup pass; query lại không còn containers/volumes của project này.
+- init-env đã thử trong thư mục disposable: tạo key ngẫu nhiên, không overwrite .env khi gọi lại.
+- Ruff/mypy strict pass (17 source files); frontend lint/typecheck/build và 9 Mermaid renders pass.
+  Backend/tooling audit: no known vulnerabilities; frontend còn 7 moderate dev-tooling findings cũ,
+  0 high/critical. Chưa có login UI hoặc workflow execution để nghiệm thu.
+
+Các lỗi tìm và sửa trong phiên: migration asyncpg không chấp nhận nhiều DDL trong một prepared statement;
+OSError kết nối DB chưa thành 503; container non-root cần coverage data trong /tmp.
+Các lượt Docker Desktop 500/502 được ghi là lỗi môi trường, không là pass. Harness giảm memory overlap
+bằng cách dừng idle scaffold roles lúc test auth rồi khởi động lại trước full outage drills.
+
+GitLab project đã tạo; GitHub Actions bị billing lock trước khi start job, đang chờ Support ticket.
+Chưa xác nhận SSH sync hoặc GitLab pipeline mới. Evidence cuối nằm trong
+reports/ff-foundation-7d4f489fe514/{result.txt,coverage.json,compose.log} (gitignored).
+
 ## Nghiệm thu 2026-11-15 — sau restart
 
 Full `scripts/smoke.ps1` **exit 0**, project `ff-foundation-620f6ea29f00`:

@@ -2,27 +2,34 @@
 
 Distributed workflow orchestration built with FastAPI, PostgreSQL and RabbitMQ.
 
-**Current status:** infrastructure scaffold plus validated DAG/message contracts. Authentication, DAG execution, retry and cancellation are planned, not implemented. See [document authority](docs/source-documents.md).
+**Current status:** infrastructure and DAG/message validation plus Auth/Projects API implementation.
+Workflow execution/retry/cancellation remain planned. See [auth usage](docs/development/auth.md)
+and [verification evidence](docs/development/verification.md) for the tested scope.
 
 Local foundation acceptance passed on 2026-11-15: full checks, clean local clone/install and
-isolated Compose migration/outage recovery. GitLab project/runner and remote pipeline/clone are
-pending setup. See [verification evidence](docs/development/verification.md).
+isolated Compose migration/outage recovery. Auth/Projects local acceptance passed on 2026-11-16
+(63 tests plus real HTTP, migration and recovery drills). GitLab project exists; verified sync/runner/
+remote pipeline remain pending while GitHub Actions is billing-locked. See [verification evidence](docs/development/verification.md).
 
 ## Quick start (PowerShell)
 
 Prerequisites: Git, Docker Desktop with Linux containers and Docker Compose.
 
 ```powershell
-Copy-Item .env.example .env
+.\scripts\init-env.ps1
 docker compose up -d --build --wait
 docker compose ps
 ```
 
 Open http://localhost:5173 for the connection screen and http://localhost:8000/docs for implemented API documentation.
 Local credentials in the example are development-only. Database/broker ports are not published.
+init-env.ps1 generates a private signing key and refuses to overwrite an existing .env.
+For an existing .env, add FLOWFORGE_JWT_SECRET with at least 32 random bytes; keep it across restarts.
+Changing the signing key invalidates existing access JWTs. There is no login UI yet.
 
 ```powershell
 docker compose exec api python -m flowforge.process worker --probe
+docker compose exec api python -m flowforge.bootstrap --email owner@example.com
 docker compose logs scheduler publisher worker
 docker compose down
 ```

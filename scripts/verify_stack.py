@@ -1,6 +1,7 @@
 """Build and exercise a new disposable Compose project; never touches other stacks."""
 import json
 import os
+import secrets
 import socket
 import subprocess
 import time
@@ -27,6 +28,7 @@ def main():
         if line and not line.startswith("#"):
             key, value = line.split("=", 1)
             env[key] = value
+    env["FLOWFORGE_JWT_SECRET"] = secrets.token_urlsafe(48)
     base = ["docker", "compose", "--env-file", ".env.example", "-p", project]
 
     def compose(*args, expected=0):
@@ -77,7 +79,15 @@ def main():
             f"http://127.0.0.1:{env['WEB_PORT']}/health/ready", timeout=8
         ) as response:
             assert json.load(response)["status"] == "ready"
-        print(compose("exec", "-T", "api", "pytest", "integration", "-q"), flush=True)
+        # Auth tests need API/DB only. Avoid idle process/probe memory overlapping Argon2 tests.
+        compose("stop", "scheduler", "publisher", "worker", "frontend")
+        print(compose("exec", "-T", "api", "pytest", "tests", "integration", "-q",
+                      "--cov=flowforge", "--cov-report=json:/tmp/coverage.json"), flush=True)
+        print(compose("exec", "-T", "api", "python", "-m", "flowforge.coverage_gate",
+                      "/tmp/coverage.json"), flush=True)
+        compose("cp", "api:/tmp/coverage.json", str(reports / "coverage.json"))
+        print(compose("exec", "-T", "api", "python", "integration/http_acceptance.py"), flush=True)
+        compose("up", "-d", "--no-build", "--wait", "--wait-timeout", "180")
 
         compose("stop", "rabbitmq")
         compose("exec", "-T", "api", "python", "-m", "flowforge.process",
@@ -109,6 +119,12 @@ def main():
         compose("run", "--rm", "migrate", "alembic", "upgrade", "0001_identity")
         sql("INSERT INTO users(id,email,password_hash) VALUES "
             "('00000000-0000-0000-0000-000000000001','Old@EXAMPLE.test','fixture')")
+        sql("INSERT INTO projects(id,owner_id,name) VALUES "
+            "('00000000-0000-0000-0000-000000000002',"
+            "'00000000-0000-0000-0000-000000000001','Migrated project')")
+        sql("INSERT INTO project_members(project_id,user_id,role) VALUES "
+            "('00000000-0000-0000-0000-000000000002',"
+            "'00000000-0000-0000-0000-000000000001','OWNER')")
         # Reject dirty existing data without altering or discarding the account.
         compose("run", "--rm", "migrate", "alembic", "upgrade", "head", expected=1)
         assert sql("SELECT version_num FROM alembic_version") == "0001_identity"
@@ -116,6 +132,12 @@ def main():
         sql("UPDATE users SET email = lower(email)")  # Disposable fixture only.
         compose("run", "--rm", "migrate", "alembic", "upgrade", "head")
         assert sql("SELECT count(*) FROM users") == "1"
+        assert sql("SELECT count(*) FROM projects") == "1"
+        assert sql("SELECT count(*) FROM project_members") == "1"
+        compose("run", "--rm", "migrate", "alembic", "downgrade", "0002_identity_guards")
+        assert sql("SELECT count(*) FROM users") == "1"
+        assert sql("SELECT count(*) FROM projects") == "1"
+        compose("run", "--rm", "migrate", "alembic", "upgrade", "head")
         compose("run", "--rm", "migrate", "alembic", "upgrade", "head")
         compose("up", "-d", "--wait", "--wait-timeout", "120")
         assert status("/health/ready") == 200

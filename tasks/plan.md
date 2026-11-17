@@ -1,16 +1,73 @@
 # FlowForge — Plan v2 và nhật ký tiến trình
 
-Cập nhật **2026-11-15** (Asia/Ho_Chi_Minh). File theo dõi chính sau mỗi buổi làm việc.
+Cập nhật **2026-11-16** (Asia/Ho_Chi_Minh). File theo dõi chính sau mỗi buổi làm việc.
 FlowForge **10 tuần**, tổng hai project **19 tuần**, 12–15 giờ/tuần.
 Tài liệu trong repo là nguồn duy trì; hai tài liệu ngoài repo là đề xuất v1.
 Xem [document authority](../docs/source-documents.md).
 
 ## Trạng thái hiện tại
 
-Foundation có code và tests; DAG/message validation dùng được trong Python.
-Auth, API publish/run, scheduler và worker thực thi chưa triển khai.
+Foundation, DAG/message validation và Auth/Projects API đã có code và tests.
+API publish/run, scheduler và worker thực thi chưa triển khai; chưa có giao diện login.
 Nghiệm thu local Compose/migration/outage đã pass sau restart. Remote CI và remote clone còn chờ
 thiết lập GitLab; phần designed của engine không được coi là đã chạy.
+
+## Nhật ký 2026-11-16 — Auth + Projects API
+
+Nhánh `feat/auth-projects` từ foundation commit `305f2c4`. Không commit/push thay đổi này tự động.
+
+### Phạm vi và quyết định đã triển khai
+
+- Bootstrap CLI nhập ẩn mật khẩu, Argon2, email canonical; không public registration hoặc reset password.
+- Login/me, access JWT 30 phút và refresh cookie HttpOnly trong session tuyệt đối 7 ngày.
+  Logout thu hồi phiên hiện tại; mọi request bảo vệ kiểm tra DB session. Refresh rotation và replay policy
+  strict: token cũ dùng lại thu hồi session, kể cả trường hợp refresh đồng thời; không grace window.
+- JSON/custom CSRF header, Origin allowlist, body cap 8 KiB; login limit 10/phút/IP dùng DB counter atomic,
+  không tin proxy headers. Giới hạn hai job Argon2 đồng thời để kiểm soát RAM.
+- Project create/list/detail/rename, member list/add/change/remove và ownership transfer. Project+OWNER
+  ghi cùng transaction; khóa session rồi project, đọc lại quyền sau khi lấy khóa. Không xóa project.
+- Migration 0003 thêm session/refresh hash history/login counters; không sửa 0001/0002 hoặc tự đổi dữ liệu cũ.
+- `scripts/init-env.ps1` tạo private JWT key và từ chối ghi đè .env; smoke có key riêng. Backend image dùng
+  root build context để test canonical examples; coverage/cache ghi /tmp khi chạy non-root.
+- Smoke/CI đo auth, projects và contracts riêng với gate >=80%; thêm HTTP acceptance hai user qua TCP thật.
+  Hướng dẫn sử dụng/giới hạn: docs/development/auth.md. ADR 005 ghi quyết định phiên và RBAC.
+
+### Kiểm chứng hiện có
+
+- RED: unit security fail trước khi có module; HTTP login 404 trước khi nối router; DB outage test tái hiện
+  OSError chưa được xử lý. Đã sửa để DB mất kết nối trả 503 và giữ nguyên auth session.
+- Full suite **63 pass** trong Compose; coverage auth **98.0%**, projects **86.8%**, contracts **100%**.
+  HTTP login/me/refresh/logout, session isolation và project RBAC qua server thật pass.
+- Tests gồm bad/missing/expired/forged JWT; replay và refresh/logout races; concurrent login limit;
+  duplicate bootstrap/member; cookie flags/CSRF/secret redaction; rollback khi insert member lỗi;
+  transfer-owner race và quyền bị thu hồi trong lúc chờ project lock.
+- `check.ps1` exit 0: 35 unit tests, Ruff/mypy strict (17 source files), dependency audit,
+  frontend lint/typecheck/build và 9 Mermaid charts. Backend/tooling audit không có known vulnerabilities;
+  7 moderate frontend dev-tooling findings cũ vẫn được theo dõi, không suppress/downgrade ép.
+- Clean local snapshot clone với fresh uv/npm installs pass: source tree
+  `bf12d8a341a6b126e4612b42db2153ccde55ba29`, evidence reports/clean-clone.log.
+  Đây không phải remote CI/remote clone.
+- init-env đã thử trên thư mục disposable: tạo key ngẫu nhiên và giữ file nguyên vẹn khi chạy lần hai.
+- **Full smoke exit 0**, project `ff-foundation-7d4f489fe514`: 63 tests, coverage gate từng nhóm,
+  HTTP acceptance thật, broker/DB outage/recovery, SIGTERM và migration drill đều pass.
+  Drill gồm base → 0001 → dirty-data rejection/rollback → head → downgrade 0002 → head/repeat;
+  user/project/OWNER membership cũ được giữ. Log capture và cleanup pass, không còn container test.
+  Evidence: reports/ff-foundation-7d4f489fe514/{result.txt,coverage.json,compose.log}.
+  Một lượt trước pass với 55 tests; các lượt Docker 500/502 không được coi là full pass.
+  Tạm dừng idle roles trong auth tests và khởi động lại trước outage drills giúp giảm tải; không bỏ test.
+
+**Kết luận:** mốc Auth + Projects API được nghiệm thu local. Không phát hiện lỗi nghiệp vụ còn mở trong
+các luồng đã kiểm chứng; không coi test xanh là chứng minh tuyệt đối không còn lỗi. Login UI và workflow
+execution nằm ngoài mốc này. Remote CI vẫn chờ billing lock/runner và source mới chưa được push.
+
+### Remote CI và bước tiếp theo
+
+- Foundation đã được người dùng commit/push lên GitHub (`305f2c4`); GitLab project đã tạo:
+  https://gitlab.com/hung-it/flow_forge.git. GitHub Actions sync đã kích hoạt nhưng job chưa start do
+  billing lock; đang chờ Support ticket. SSH/deploy-key và GitLab pipeline chưa được xác nhận chạy đúng.
+- Nghiệm thu local của auth đã xong; review diff rồi commit/push khi người dùng yêu cầu.
+- Mốc tiếp theo: workflow/version API dùng DAG schema hiện có, immutable publication, handler payload
+  schemas và request limits; sau đó mới làm run/task persistence/idempotency. Chưa triển khai engine trong mốc auth.
 
 ## Nghiệm thu tiếp ngày 2026-11-15 — sau restart
 
@@ -82,20 +139,17 @@ Nhật ký bên dưới ghi kết quả trước restart; các trạng thái run
 
 ## Các bước tiếp theo theo thứ tự
 
-1. Review và commit source/lockfiles;
-   tạo GitLab project/runner, cấu hình URL/deploy key/known_hosts, pipeline đúng SHA và fresh remote clone.
-   Smoke local đã pass; cấu hình CI tồn tại không đồng nghĩa pipeline remote đã pass.
-2. Auth/projects: bootstrap user, Argon2, JWT expiry, canonical email; transaction project + OWNER,
-   role/transfer-owner/cross-project tests.
-3. Workflow/version API: dùng WorkflowSpec, limits trước parse, defaults snapshot/checksum,
+1. Review/commit/push nhánh feat/auth-projects khi được yêu cầu.
+   Chờ billing lock được gỡ, rerun GitHub sync và kiểm chứng GitLab pipeline đúng SHA/remote clone.
+2. Workflow/version API: dùng WorkflowSpec, limits trước parse, defaults snapshot/checksum,
    handler payload schemas và immutable version tests.
-4. Runs/idempotency: bảng runs/tasks/dependencies và composite FK/CHECKs; binding resolution;
+3. Runs/idempotency: bảng runs/tasks/dependencies và composite FK/CHECKs; binding resolution;
    100 requests cùng key tạo một run, payload khác trả 409.
-5. Scheduler/outbox: atomic dispatch, DB polling, confirms/mandatory routing; same-generation redrive,
+4. Scheduler/outbox: atomic dispatch, DB polling, confirms/mandatory routing; same-generation redrive,
    backlog >60s và broker outage không mất committed work.
-6. Worker/reliability: registry, claims/attempts, leases/heartbeat/hard deadlines, retries, fenced commits,
+5. Worker/reliability: registry, claims/attempts, leases/heartbeat/hard deadlines, retries, fenced commits,
    cancel races và real multi-worker/crash tests.
-7. Dashboard → observability → benchmark/release theo lịch bên dưới.
+6. Dashboard → observability → benchmark/release theo lịch bên dưới.
 
 ## Roadmap v2
 
@@ -125,6 +179,14 @@ Hoãn AWS/Kubernetes, cron, compensation, visual editor, arbitrary user code.
 Roadmap tổng hai project tăng từ 18 lên 19 tuần; Guardian bắt đầu sau FlowForge.
 
 ## Quy tắc cập nhật tiến trình
+
+### 2026-11-17 — Chẩn đoán và sửa GitLab CI
+
+- Pipeline `3077518973`, commit `305f2c43`: frontend pass; backend không pull được image (`manifest unknown`); diagrams thiếu package index cho bước Puppeteer `--install-deps`; smoke bị skip vì stage check thất bại.
+- Sửa `.gitlab-ci.yml`: đổi backend sang tag đã kiểm tra tồn tại `ghcr.io/astral-sh/uv:0.11.0-python3.12-trixie-slim`, giữ uv 0.11.0/Python 3.12; thêm `apt-get update` trước bước cài dependency Chrome.
+- Đã kiểm tra trong container Linux sạch trên source local hiện tại: ruff pass, mypy pass (17 files), 35 unit tests pass, coverage contracts 100%, pip-audit không có lỗ hổng đã biết. Diagrams render đủ 9 SVG, npm audit 0 vulnerabilities. Log: `reports/ci-backend-20261117.log`, `reports/ci-diagrams-20261117.log`.
+- Đã commit riêng hai chỗ sửa CI thành `af9d51d` và push nhánh `feat/auth-projects` lên GitHub. GitHub Actions sync run `44033620654` đang chạy tại thời điểm kiểm tra. Các thay đổi AUTH/Projects còn lại và nhật ký này vẫn ở local, chưa commit/push.
+- Tiếp theo: kiểm tra pipeline GitLab tại đúng SHA `af9d51d` (bao gồm smoke), chưa xác nhận pipeline xanh. Retry pipeline SHA cũ sẽ vẫn dùng cấu hình cũ. Sau đó đưa AUTH/Projects lên remote CI để nghiệm thu trước khi chuyển sang workflow/DAG.
 
 Sau mỗi buổi thêm nhật ký có ngày, thay đổi, command/kết quả, phần chưa xong và bước tiếp theo.
 Giữ nhật ký cũ; không ghi đè lịch sử. Phân biệt designed / implemented / verified.

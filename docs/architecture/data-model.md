@@ -3,12 +3,16 @@
 UUID cho mọi ID; TIMESTAMPTZ UTC cho timestamps; JSONB cho payload. PK id trừ project_members dùng composite PK. Cột không ghi nullable là NOT NULL.
 Identity migrate ở 0001_identity, canonical email/one-owner index bổ sung ở 0002_identity_guards.
 Các bảng workflow/execution/outbox/audit vẫn là thiết kế đích.
+Migration 0003_auth_sessions bổ sung auth_sessions, refresh_tokens và login_counters (đã triển khai).
 
 | Bảng | Cột và constraints |
 |---|---|
 | users | id UUID PK; email TEXT UNIQUE; password_hash TEXT; created_at timestamp default now |
 | projects | id UUID PK; owner_id UUID FK users; name TEXT; created_at timestamp |
 | project_members | project_id FK projects + user_id FK users composite PK; role TEXT CHECK OWNER/DEVELOPER/VIEWER |
+| auth_sessions | id UUID PK; user_id FK users; created_at/expires_at TIMESTAMPTZ; revoked_at nullable; expires_at > created_at; index(user_id) |
+| refresh_tokens | token_hash TEXT PK (SHA-256, không lưu raw token); session_id FK auth_sessions; created_at; consumed_at nullable; index(session_id) |
+| login_counters | composite PK(ip,window_start); attempts INTEGER CHECK >0; index(window_start); shared fixed-minute login limit |
 | workflow_definitions | id UUID PK; project_id FK projects; name TEXT; created_at timestamp; UNIQUE(project_id,id) |
 | workflow_versions | id UUID PK; workflow_id FK definitions; version INTEGER CHECK >0; dag_json JSONB; checksum TEXT; created_at timestamp; UNIQUE(workflow_id,version); UNIQUE(workflow_id,id) |
 | workflow_runs | id UUID PK; workflow_id UUID; workflow_version_id UUID; project_id FK projects; composite FKs(project_id,workflow_id)->definitions(project_id,id), (workflow_id,workflow_version_id)->versions(workflow_id,id); status TEXT CHECK run states; input_json JSONB; input_hash TEXT; idempotency_key TEXT nullable; created_at timestamp; started_at/finished_at timestamp nullable; unique index(project_id,idempotency_key) WHERE idempotency_key IS NOT NULL |

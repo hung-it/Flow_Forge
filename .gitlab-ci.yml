@@ -39,13 +39,18 @@ smoke:
     COMPOSE_PROJECT_NAME: ff-ci-$CI_PIPELINE_ID
   script:
     - cp .env.example .env
+    - printf '\nFLOWFORGE_JWT_SECRET=%s\n' "$(head -c 48 /dev/urandom | base64 | tr -d '\n')" >> .env
     - docker compose build api
     - docker compose build frontend
     - docker compose up -d --no-build --wait
     - docker compose exec -T api python -m flowforge.process worker --probe
     - docker compose exec -T api python -m flowforge.process scheduler --probe
     - mkdir -p reports
-    - docker compose exec -T api pytest integration -q --junitxml=/tmp/integration.xml
+    - docker compose stop scheduler publisher worker frontend
+    - docker compose exec -T api pytest tests integration -q --junitxml=/tmp/integration.xml --cov=flowforge --cov-report=json:/tmp/coverage.json
+    - docker compose exec -T api python -m flowforge.coverage_gate /tmp/coverage.json
+    - docker compose exec -T api python integration/http_acceptance.py
+    - docker compose up -d --no-build --wait
     - docker compose cp api:/tmp/integration.xml reports/integration.xml
     - docker compose stop api scheduler publisher worker frontend
     - docker compose run --rm migrate alembic downgrade base

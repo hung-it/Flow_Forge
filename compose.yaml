@@ -1,6 +1,8 @@
 x-backend: &backend
   image: ${COMPOSE_PROJECT_NAME:-flowforge}-backend:local
-  build: ./backend
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
   environment:
     FLOWFORGE_DATABASE_URL: ${FLOWFORGE_DATABASE_URL:?copy .env.example to .env}
     FLOWFORGE_RABBITMQ_URL: ${FLOWFORGE_RABBITMQ_URL:?copy .env.example to .env}
@@ -43,6 +45,12 @@ services:
         condition: service_healthy
   api:
     <<: *backend
+    environment:
+      FLOWFORGE_DATABASE_URL: ${FLOWFORGE_DATABASE_URL}
+      FLOWFORGE_RABBITMQ_URL: ${FLOWFORGE_RABBITMQ_URL}
+      FLOWFORGE_JWT_SECRET: ${FLOWFORGE_JWT_SECRET:?generate a private JWT secret in .env}
+      FLOWFORGE_COOKIE_SECURE: ${FLOWFORGE_COOKIE_SECURE:-false}
+      FLOWFORGE_ALLOWED_ORIGINS: '${FLOWFORGE_ALLOWED_ORIGINS:-["http://localhost:8000","http://localhost:5173","http://127.0.0.1:8000","http://127.0.0.1:5173"]}'
     ports: ['127.0.0.1:${API_PORT:-8000}:8000']
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready', timeout=3)"]

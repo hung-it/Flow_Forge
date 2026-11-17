@@ -3,7 +3,7 @@
 ## Architecture & scaffold
 - [x] Repo branch, package và dependency locks
 - [x] Architecture, tám nhóm sơ đồ Mermaid, ERD và contracts
-- [x] Bốn ADR và roadmap 10 tuần
+- [x] Năm ADR và roadmap 10 tuần
 - [x] Health API, identity migration, lifecycle/probes
 - [x] Frontend health và Compose
 - [x] GitHub sync / GitLab pipeline configuration
@@ -23,7 +23,9 @@
 - [ ] Fresh remote clone rehearsal after commit/push
 
 ## Core engine tiếp theo
-- [ ] Auth, bootstrap-user, project membership, cross-project tests
+- [x] Auth, bootstrap-user, project membership, cross-project tests (nghiệm thu local 2026-11-16)
+- [x] Refresh rotation/replay, session logout, CSRF/cookie và concurrency tests
+- [x] Auth/projects/contracts coverage gates >=80% trên combined PostgreSQL suite
 - [ ] DAG validation và immutable versions
 - [ ] Run persistence, idempotency, concurrent requests
 - [ ] Scheduler/outbox, durable messaging
