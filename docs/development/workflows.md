@@ -14,7 +14,7 @@ Implemented under `/api/v1`; requires a live authenticated session. OWNER and DE
 
 Lists use limit (default 20, max 100) and offset (default 0). Workflow ordering is created_at then UUID. New workflows atomically receive a revision-1 draft with empty nodes/edges. Drafts can store incomplete/invalid DAGs; publication must satisfy WorkflowSpec and exact required handler binding names. Rename changes metadata only; DAG name remains a snapshot content label.
 
-Request bodies must be application/json and at most 256 KiB in total, including streamed requests. JSON roots must match request schemas; DAG must be an object; non-finite JSON values are rejected. Existing 8 KiB auth limit is preserved. Errors use the existing code/message/details/request_id envelope: 401 invalid session, 403 insufficient role, 404 invisible/missing resource, 409 stale revision, 413 oversized request, 415 media type, 422 invalid input/DAG, 503 database unavailable.
+Request bodies must be application/json and at most 256 KiB in total, including streamed requests. JSON roots must match request schemas; DAG must be an object. Non-finite numbers (including exponent overflow), NUL and invalid Unicode surrogate strings are rejected before PostgreSQL JSONB writes. Existing 8 KiB auth limit is preserved. Errors use the existing code/message/details/request_id envelope: 401 invalid session, 403 insufficient role, 404 invisible/missing resource, 409 stale revision, 413 oversized request, 415 media type, 422 invalid input/DAG, 503 database unavailable.
 
 ## Snapshot and concurrency
 

@@ -17,7 +17,8 @@ Run/task persistence, scheduler/worker thực thi và login UI là các bước 
 - Quyết định: một draft lưu được DAG chưa hợp lệ; OWNER/DEVELOPER cùng biên tập; mỗi publish tạo version mới, không deduplicate checksum. Revision chống stale save/publish; version bất biến.
 - AUTH/Projects đã commit/push. Pipeline nền 3077706299 tại c1a7b44 xanh đủ bốn job, gồm smoke. Root cause healthcheck cũ: import DB/broker vượt timeout 5s. Đã chuyển import sang nhánh cần dùng, giữ nguyên timeout và tiêu chí health.
 - Migration 0004, workflow metadata, GET/PUT draft, publish/list/read version, schema năm handler và body cap 256 KiB đã triển khai. Hợp đồng: docs/development/workflows.md.
-- Linux: **79 tests pass**, Ruff/mypy pass; coverage auth 99.0%, projects 100%, contracts 100%, workflows 99.5%. Cấu hình coverage hỗ trợ greenlet; không hạ gate 80%. Evidence: reports/workflows-linux.log, workflows-coverage.json, workflows-junit.xml.
+- Linux cuối: **83 tests pass**, Ruff/mypy pass; coverage auth 99.0%, projects 100%, contracts 100%, workflows 99.5%. Cấu hình coverage hỗ trợ greenlet; không hạ gate 80%. Evidence: reports/workflows-linux.log, workflows-coverage.json, workflows-junit.xml.
+- Review thêm: chặn số JSON tràn thành infinity, NUL và Unicode surrogate trước khi ghi JSONB; trả 422 và giữ nguyên revision. Có regression test cho từng trường hợp và cho healthcheck không import DB/broker.
 - HTTP acceptance thật và downgrade 0004 về 0003 rồi upgrade lại bảo toàn user/project/member/session đều pass.
 - Full isolated Compose smoke pass: reports/ff-foundation-c60b9cc014f1/result.txt, compose.log; gồm outage/recovery và migration base/old/dirty-data/head. Lượt này có 77 tests trước khi bổ sung hai case tranh chấp/chunked UTF-8; hai case mới đã có trong lượt Linux 79 tests.
 - Commit Workflow API 448866d đã push. Chưa đánh dấu nghiệm thu remote workflow: cần hai pipeline hoàn chỉnh xanh trên cùng SHA bàn giao sau cập nhật tài liệu.

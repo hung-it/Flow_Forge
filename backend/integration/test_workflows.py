@@ -209,3 +209,15 @@ async def test_chunked_unicode_limits_and_unknown_workflow(setup):
     assert (
         await client.put(path + "/draft", headers=headers, content=chunks(payload + b" "))
     ).status_code == 413
+
+
+@pytest.mark.parametrize("value", ["1e999", '"\\u0000"', '"\\ud800"'])
+async def test_jsonb_incompatible_values_are_validation_errors(setup, value):
+    client, _, first, *_ = setup
+    auth, _, path = await resource(client, first)
+    body = '{"expected_revision":1,"dag":{"value":' + value + "}}"
+    r = await client.put(
+        path + "/draft", headers={**auth, "Content-Type": "application/json"}, content=body
+    )
+    assert r.status_code == 422, r.text
+    assert (await client.get(path + "/draft", headers=auth)).json()["revision"] == 1

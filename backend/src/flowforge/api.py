@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import math
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -42,8 +43,28 @@ class AuthBodyLimit:
             await self.app(scope, receive, send)
             return
         cap = 8192 if auth else 256 * 1024
+
         def invalid_constant(value: str) -> None:
             raise ValueError("Non-finite JSON")
+
+        def finite_float(value: str) -> float:
+            result = float(value)
+            if not math.isfinite(result):
+                raise ValueError("Non-finite JSON")
+            return result
+
+        def valid_text(value: object) -> None:
+            if isinstance(value, str):
+                if "\x00" in value:
+                    raise ValueError("NUL is unsupported by PostgreSQL JSONB")
+                value.encode("utf-8")
+            elif isinstance(value, dict):
+                for key, item in value.items():
+                    valid_text(key)
+                    valid_text(item)
+            elif isinstance(value, list):
+                for item in value:
+                    valid_text(item)
 
         body = bytearray()
         while True:
@@ -71,7 +92,9 @@ class AuthBodyLimit:
             if content_type == b"application/json":
                 status, code = 422, "VALIDATION_ERROR"
                 try:
-                    json.loads(body, parse_constant=invalid_constant)
+                    valid_text(
+                        json.loads(body, parse_constant=invalid_constant, parse_float=finite_float)
+                    )
                 except (ValueError, RecursionError):
                     pass
                 else:
