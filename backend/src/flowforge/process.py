@@ -8,15 +8,6 @@ import tempfile
 import time
 from pathlib import Path
 
-import aio_pika
-from aio_pika.exceptions import AMQPException
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import create_async_engine
-
-from flowforge.config import Settings
-from flowforge.observability import configure_logging
-from flowforge.persistence import check_database
-
 HEALTH_DIR = Path(tempfile.gettempdir())
 
 
@@ -34,6 +25,12 @@ def healthy_loop(role: str) -> bool:
 
 
 async def probe(role: str) -> bool:
+    import aio_pika
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from flowforge.config import Settings
+    from flowforge.persistence import check_database
+
     settings = Settings()
     engine = create_async_engine(settings.database_url)
     try:
@@ -48,6 +45,11 @@ async def probe(role: str) -> bool:
 
 
 async def run(role: str) -> None:
+    from aio_pika.exceptions import AMQPException
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from flowforge.observability import configure_logging
+
     configure_logging()
     logger = logging.getLogger(role)
     stop = asyncio.Event()
@@ -87,6 +89,9 @@ def main() -> None:
     if args.health:
         raise SystemExit(0 if healthy_loop(args.role) else 1)
     if args.probe:
+        from aio_pika.exceptions import AMQPException
+        from sqlalchemy.exc import SQLAlchemyError
+
         try:
             healthy = asyncio.run(asyncio.wait_for(probe(args.role), timeout=10))
         except (SQLAlchemyError, AMQPException, OSError, TimeoutError):
