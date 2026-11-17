@@ -27,7 +27,7 @@
 - [x] Refresh rotation/replay, session logout, CSRF/cookie và concurrency tests
 - [x] Auth/projects/contracts coverage gates >=80% trên combined PostgreSQL suite
 - [x] Workflow/draft API, DAG validation, handler contracts, immutable versions (local verified)
-- [ ] Hai pipeline GitLab workflow xanh tại cùng SHA bàn giao, gồm smoke
+- [x] Hai pipeline GitLab workflow xanh tại SHA 7acd91f, gồm smoke: 3077760956 và 3077766257 (83 tests/lần)
 - [ ] Run persistence, idempotency, concurrent requests
 - [ ] Scheduler/outbox, durable messaging
 - [ ] Worker execution, lease/fencing

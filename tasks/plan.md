@@ -21,7 +21,10 @@ Run/task persistence, scheduler/worker thực thi và login UI là các bước 
 - Review thêm: chặn số JSON tràn thành infinity, NUL và Unicode surrogate trước khi ghi JSONB; trả 422 và giữ nguyên revision. Có regression test cho từng trường hợp và cho healthcheck không import DB/broker.
 - HTTP acceptance thật và downgrade 0004 về 0003 rồi upgrade lại bảo toàn user/project/member/session đều pass.
 - Full isolated Compose smoke pass: reports/ff-foundation-c60b9cc014f1/result.txt, compose.log; gồm outage/recovery và migration base/old/dirty-data/head. Lượt này có 77 tests trước khi bổ sung hai case tranh chấp/chunked UTF-8; hai case mới đã có trong lượt Linux 79 tests.
-- Commit Workflow API 448866d đã push. Chưa đánh dấu nghiệm thu remote workflow: cần hai pipeline hoàn chỉnh xanh trên cùng SHA bàn giao sau cập nhật tài liệu.
+- **Nghiệm thu remote hoàn tất tại SHA 7acd91f**: pipeline [3077760956](https://gitlab.com/hung-it/flow_forge/-/pipelines/3077760956) và [3077766257](https://gitlab.com/hung-it/flow_forge/-/pipelines/3077766257) đều SUCCESS đủ backend/frontend/diagrams/smoke. Lần xác nhận thứ hai dùng nhánh ci/verify-workflows với cùng SHA, checkout và stack riêng.
+- Mỗi smoke chạy **83 tests pass**, coverage từng nhóm >=80%, HTTP acceptance thật và migration preservation/base→head đều pass. Evidence API: reports/workflows-gitlab-acceptance.json; JUnit/coverage/Compose/health diagnostics có trong artifact GitLab.
+- `check.ps1` pass: lint/mypy, unit tests, frontend lint/typecheck/build, 9 sơ đồ và audit. Bản clone mới từ GitHub tại 55a43d5, frozen uv install: 46 unit tests pass. Bảy moderate findings cũ trong frontend dev tooling vẫn được theo dõi, không có high/critical.
+- Mốc Workflow/draft/version API đã nghiệm thu trong các luồng kiểm thử; không có lỗi nghiệp vụ đã biết còn mở trong phạm vi này. Nhật ký kết quả cuối này cập nhật local sau khi xác minh CI; code đã push tại 7acd91f.
 - Tiếp theo sau nghiệm thu: Run/Task persistence và Idempotency-Key theo project; chưa triển khai scheduler/worker execution.
 
 ## Nhật ký 2026-11-16 — Auth + Projects API
