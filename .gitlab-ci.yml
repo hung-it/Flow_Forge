@@ -1,7 +1,7 @@
 stages: [check, smoke]
 backend:
   stage: check
-  image: ghcr.io/astral-sh/uv:0.11.0-python3.12-bookworm-slim
+  image: ghcr.io/astral-sh/uv:0.11.0-python3.12-trixie-slim
   script:
     - cd backend
     - uv sync --frozen
@@ -67,6 +67,7 @@ diagrams:
   script:
     - cd tooling
     - npm ci
+    - apt-get update
     - npx puppeteer browsers install chrome --install-deps
     - npm run diagrams
     - npm audit --audit-level=high
