@@ -58,12 +58,14 @@ smoke:
     - docker compose up -d --no-build --wait
     - docker compose exec -T api python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"
   after_script:
+    - docker compose ps -a > compose-status.log
+    - docker inspect $(docker compose ps -aq) > container-diagnostics.json
     - docker compose logs --no-color > compose.log
     - docker compose down -v
   artifacts:
     when: always
     expire_in: 7 days
-    paths: [compose.log, reports/integration.xml]
+    paths: [compose.log, compose-status.log, container-diagnostics.json, reports/integration.xml]
     reports:
       junit: reports/integration.xml
 diagrams:
