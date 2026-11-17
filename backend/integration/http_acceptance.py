@@ -6,6 +6,7 @@ import json
 import secrets
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -67,13 +68,43 @@ def main() -> None:
     )
     assert call(member, "GET", path, token=member_token)[0] == 200
     assert call(member, "PATCH", path, {"name": "Denied"}, member_token)[0] == 403
+    status, workflow = call(owner, "POST", path + "/workflows", {"name": "HTTP workflow"}, token)
+    assert status == 201
+    workflow_path = "/workflows/" + workflow["id"]
+    assert call(owner, "POST", workflow_path + "/versions", {"draft_revision": 1}, token)[0] == 422
+    dag = json.loads((Path(__file__).parents[2] / "examples/document-workflow.json").read_text())
+    assert (
+        call(owner, "PUT", workflow_path + "/draft", {"expected_revision": 1, "dag": dag}, token)[0]
+        == 200
+    )
+    status, version = call(owner, "POST", workflow_path + "/versions", {"draft_revision": 2}, token)
+    assert status == 201 and version["version"] == 1
+    assert call(owner, "POST", workflow_path + "/versions", {"draft_revision": 2}, token)[0] == 201
+    assert (
+        call(
+            member,
+            "PUT",
+            workflow_path + "/draft",
+            {"expected_revision": 2, "dag": {}},
+            member_token,
+        )[0]
+        == 403
+    )
+    assert call(member, "GET", workflow_path + "/versions/1", token=member_token)[1] == version
+    assert (
+        call(owner, "PUT", workflow_path + "/draft", {"expected_revision": 2, "dag": {}}, token)[0]
+        == 200
+    )
+    assert call(owner, "GET", workflow_path + "/versions/1", token=token)[1] == version
     status, payload = call(owner, "POST", "/auth/refresh", {})
     assert status == 200
     new_token = payload["access_token"]
     assert call(owner, "POST", "/auth/logout", {})[0] == 204
     assert call(owner, "GET", "/auth/me", token=new_token)[0] == 401
     assert call(member, "GET", "/auth/me", token=member_token)[0] == 200
-    print("PASS: real HTTP login/me/refresh/logout, session isolation and project RBAC")
+    print(
+        "PASS: HTTP auth/project RBAC and workflow draft/publication immutability"
+    )
 
 
 if __name__ == "__main__":

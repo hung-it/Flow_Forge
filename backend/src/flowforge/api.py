@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import uuid
 from collections.abc import AsyncIterator
@@ -21,6 +22,7 @@ from flowforge.errors import ApiError
 from flowforge.observability import configure_logging
 from flowforge.persistence import check_database
 from flowforge.projects.routes import router as projects_router
+from flowforge.workflows.routes import router as workflows_router
 
 
 class AuthBodyLimit:
@@ -28,20 +30,32 @@ class AuthBodyLimit:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or not scope["path"].startswith("/api/v1/auth/"):
+        if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
+        path = scope["path"]
+        auth = path.startswith("/api/v1/auth/")
+        workflow = path.startswith("/api/v1/workflows/") or (
+            path.startswith("/api/v1/projects/") and path.endswith("/workflows")
+        )
+        if not auth and not workflow:
+            await self.app(scope, receive, send)
+            return
+        cap = 8192 if auth else 256 * 1024
+        def invalid_constant(value: str) -> None:
+            raise ValueError("Non-finite JSON")
+
         body = bytearray()
         while True:
             message = await receive()
             if message["type"] == "http.disconnect":
                 return
             body.extend(message.get("body", b""))
-            if len(body) > 8192:
+            if len(body) > cap:
                 await JSONResponse(
                     dict(
                         code="PAYLOAD_TOO_LARGE",
-                        message="Auth body exceeds 8 KiB",
+                        message="Request body exceeds limit",
                         details=[],
                         request_id=scope.get("state", {}).get("request_id"),
                     ),
@@ -50,6 +64,29 @@ class AuthBodyLimit:
                 return
             if not message.get("more_body", False):
                 break
+        if workflow and scope["method"] in {"POST", "PUT", "PATCH"}:
+            headers = dict(scope.get("headers", []))
+            content_type = headers.get(b"content-type", b"").split(b";")[0].strip().lower()
+            status, code = 415, "UNSUPPORTED_MEDIA_TYPE"
+            if content_type == b"application/json":
+                status, code = 422, "VALIDATION_ERROR"
+                try:
+                    json.loads(body, parse_constant=invalid_constant)
+                except (ValueError, RecursionError):
+                    pass
+                else:
+                    status = 0
+            if status:
+                await JSONResponse(
+                    dict(
+                        code=code,
+                        message="Invalid JSON request",
+                        details=[],
+                        request_id=scope.get("state", {}).get("request_id"),
+                    ),
+                    status_code=status,
+                )(scope, receive, send)
+                return
         consumed = False
 
         async def replay() -> Message:
@@ -85,6 +122,7 @@ def create_app() -> FastAPI:
     app.add_middleware(AuthBodyLimit)
     app.include_router(auth_router)
     app.include_router(projects_router)
+    app.include_router(workflows_router)
 
     @app.exception_handler(ApiError)
     async def business_error(request: Request, error: ApiError) -> JSONResponse:

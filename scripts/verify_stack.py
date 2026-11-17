@@ -115,6 +115,7 @@ def main():
         compose("up", "-d", "--wait", "scheduler")
 
         compose("stop", "api", "scheduler", "publisher", "worker", "frontend")
+        compose("run", "--rm", "api", "python", "integration/migration_acceptance.py")
         compose("run", "--rm", "migrate", "alembic", "downgrade", "base")
         compose("run", "--rm", "migrate", "alembic", "upgrade", "0001_identity")
         sql("INSERT INTO users(id,email,password_hash) VALUES "

@@ -51,3 +51,8 @@ Index bắt buộc: task_runs(status,next_run_at); task_runs(status,lease_until)
 Run/project/version consistency được kiểm tra trong transaction tạo run; membership OWNER được duy trì atomically bởi service.
 Không xóa version đã có run; không hỗ trợ hard-delete project trong MVP. Cột JSONB không chứa secrets.
 Migration tiếp theo bổ sung theo feature, kèm upgrade/downgrade test trên DB disposable.
+
+
+## Workflow publication milestone
+
+Migration 0004 adds workflow_definitions, workflow_drafts and workflow_versions. Drafts have one row/workflow, JSON object content and positive revision. Published versions additionally contain source_draft_revision, created_by, handler_contracts JSONB and SHA-256 checksum. UNIQUE(project_id,id) on definitions and UNIQUE(workflow_id,id) on versions prepare the run composite FKs. Version numbers are unique per workflow; checksums are deliberately not unique. A trigger rejects UPDATE/DELETE of version rows. Execution/outbox tables remain planned. See ../development/workflows.md for the API and locking contract.

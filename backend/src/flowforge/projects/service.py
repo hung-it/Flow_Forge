@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 
 
 async def visible(
-    conn: AsyncConnection, actor: Principal, project: UUID, *, write: bool = False
+    conn: AsyncConnection, actor: Principal, project: UUID, *, write: bool = False,
+    roles: tuple[str, ...] = ("OWNER",)
 ) -> RowMapping:
     if write:
         await principal(conn, actor.user_id, actor.session_id, lock=True)
@@ -31,8 +32,8 @@ async def visible(
     )
     if row is None:
         raise ApiError(404, "NOT_FOUND", "Project not found")
-    if write and row["role"] != "OWNER":
-        raise ApiError(403, "FORBIDDEN", "OWNER role required")
+    if write and row["role"] not in roles:
+        raise ApiError(403, "FORBIDDEN", "Required project role missing")
     return row
 
 

@@ -194,3 +194,12 @@ Không skip test/hạ gate; thêm domain/engine mới vào coverage khi triển 
 Chạy `./scripts/check.ps1` và `./scripts/smoke.ps1` lần lượt trên máy ít RAM.
 Evidence chi tiết: [verification.md](../docs/development/verification.md);
 checklist ngắn: [todo.md](todo.md). Reports local ở reports/ (gitignored).
+
+
+## Nh?t k? 2026-11-17 ? Workflow/draft/version API
+
+- ?? ch?t: m?t draft l?u ???c DAG ch?a h?p l?; OWNER/DEVELOPER c?ng bi?n t?p; m?i publish t?o version m?i, kh?ng deduplicate checksum. Revision ch?ng stale save/publish; version b?t bi?n.
+- AUTH/Projects ?? commit/push. Pipeline n?n 3077706299 t?i c1a7b44 xanh ?? backend/frontend/diagrams/smoke. Root cause smoke c?: healthcheck 5s b? ng?t trong l?c import th? vi?n DB/broker. Chuy?n import sang nh?nh c?n d?ng, gi? nguy?n timeout v? ti?u ch? health.
+- ?? th?m migration 0004, CRUD metadata, GET/PUT draft, publish/list/read version, catalog schema n?m handler, body limit 256 KiB v? contract t?i li?u docs/development/workflows.md.
+- S?a c?u h?nh coverage h? tr? greenlet theo t?i li?u coverage.py; gi? gate >=80% m?i nh?m. L??t Linux ??u 77 tests pass, workflow coverage 98.9%; HTTP acceptance tr?n Compose pass. ?ang b? sung v? nghi?m thu c?c tr??ng h?p tranh ch?p/chunked UTF-8/migration b?o to?n identity.
+- Ch?a ??nh d?u ho?n t?t: ph?i ghi k?t qu? full smoke cu?i, c?c pipeline GitLab ??ng SHA b?n giao v? l?n x?c nh?n l?p l?i tr??c khi chuy?n sang run/task persistence.
