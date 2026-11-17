@@ -1,16 +1,27 @@
 # FlowForge — Plan v2 và nhật ký tiến trình
 
-Cập nhật **2026-11-16** (Asia/Ho_Chi_Minh). File theo dõi chính sau mỗi buổi làm việc.
+Cập nhật **2026-11-17** (Asia/Ho_Chi_Minh). File theo dõi chính sau mỗi buổi làm việc.
 FlowForge **10 tuần**, tổng hai project **19 tuần**, 12–15 giờ/tuần.
 Tài liệu trong repo là nguồn duy trì; hai tài liệu ngoài repo là đề xuất v1.
 Xem [document authority](../docs/source-documents.md).
 
 ## Trạng thái hiện tại
 
-Foundation, DAG/message validation và Auth/Projects API đã có code và tests.
-API publish/run, scheduler và worker thực thi chưa triển khai; chưa có giao diện login.
-Nghiệm thu local Compose/migration/outage đã pass sau restart. Remote CI và remote clone còn chờ
-thiết lập GitLab; phần designed của engine không được coi là đã chạy.
+Foundation, Auth/Projects và Workflow/draft/version API đã có code, migration và tests.
+Remote nền AUTH/Projects tại c1a7b44 đã xanh cả smoke (pipeline 3077706299).
+Workflow đang nghiệm thu remote; chi tiết phiên hiện tại ở nhật ký 2026-11-17 cuối file.
+Run/task persistence, scheduler/worker thực thi và login UI là các bước sau.
+
+## Nhật ký 2026-11-17 — Workflow/draft/version API
+
+- Quyết định: một draft lưu được DAG chưa hợp lệ; OWNER/DEVELOPER cùng biên tập; mỗi publish tạo version mới, không deduplicate checksum. Revision chống stale save/publish; version bất biến.
+- AUTH/Projects đã commit/push. Pipeline nền 3077706299 tại c1a7b44 xanh đủ bốn job, gồm smoke. Root cause healthcheck cũ: import DB/broker vượt timeout 5s. Đã chuyển import sang nhánh cần dùng, giữ nguyên timeout và tiêu chí health.
+- Migration 0004, workflow metadata, GET/PUT draft, publish/list/read version, schema năm handler và body cap 256 KiB đã triển khai. Hợp đồng: docs/development/workflows.md.
+- Linux: **79 tests pass**, Ruff/mypy pass; coverage auth 99.0%, projects 100%, contracts 100%, workflows 99.5%. Cấu hình coverage hỗ trợ greenlet; không hạ gate 80%. Evidence: reports/workflows-linux.log, workflows-coverage.json, workflows-junit.xml.
+- HTTP acceptance thật và downgrade 0004 về 0003 rồi upgrade lại bảo toàn user/project/member/session đều pass.
+- Full isolated Compose smoke pass: reports/ff-foundation-c60b9cc014f1/result.txt, compose.log; gồm outage/recovery và migration base/old/dirty-data/head. Lượt này có 77 tests trước khi bổ sung hai case tranh chấp/chunked UTF-8; hai case mới đã có trong lượt Linux 79 tests.
+- Commit Workflow API 448866d đã push. Chưa đánh dấu nghiệm thu remote workflow: cần hai pipeline hoàn chỉnh xanh trên cùng SHA bàn giao sau cập nhật tài liệu.
+- Tiếp theo sau nghiệm thu: Run/Task persistence và Idempotency-Key theo project; chưa triển khai scheduler/worker execution.
 
 ## Nhật ký 2026-11-16 — Auth + Projects API
 
@@ -196,10 +207,3 @@ Evidence chi tiết: [verification.md](../docs/development/verification.md);
 checklist ngắn: [todo.md](todo.md). Reports local ở reports/ (gitignored).
 
 
-## Nh?t k? 2026-11-17 ? Workflow/draft/version API
-
-- ?? ch?t: m?t draft l?u ???c DAG ch?a h?p l?; OWNER/DEVELOPER c?ng bi?n t?p; m?i publish t?o version m?i, kh?ng deduplicate checksum. Revision ch?ng stale save/publish; version b?t bi?n.
-- AUTH/Projects ?? commit/push. Pipeline n?n 3077706299 t?i c1a7b44 xanh ?? backend/frontend/diagrams/smoke. Root cause smoke c?: healthcheck 5s b? ng?t trong l?c import th? vi?n DB/broker. Chuy?n import sang nh?nh c?n d?ng, gi? nguy?n timeout v? ti?u ch? health.
-- ?? th?m migration 0004, CRUD metadata, GET/PUT draft, publish/list/read version, catalog schema n?m handler, body limit 256 KiB v? contract t?i li?u docs/development/workflows.md.
-- S?a c?u h?nh coverage h? tr? greenlet theo t?i li?u coverage.py; gi? gate >=80% m?i nh?m. L??t Linux ??u 77 tests pass, workflow coverage 98.9%; HTTP acceptance tr?n Compose pass. ?ang b? sung v? nghi?m thu c?c tr??ng h?p tranh ch?p/chunked UTF-8/migration b?o to?n identity.
-- Ch?a ??nh d?u ho?n t?t: ph?i ghi k?t qu? full smoke cu?i, c?c pipeline GitLab ??ng SHA b?n giao v? l?n x?c nh?n l?p l?i tr??c khi chuy?n sang run/task persistence.

@@ -129,3 +129,12 @@ Dữ liệu test nằm trong volumes ff-scaffold-check; không sửa DB của d�
 PowerShell: ./scripts/check.ps1 và ./scripts/smoke.ps1.
 Diagram outputs ở reports/ (gitignored), mở architecture.md hoặc các SVG/PNG.
 Remote CI chỉ được nghiệm thu sau khi pipeline GitLab chạy thành công trên đúng commit SHA.
+
+
+## Workflow/draft/publication ? 2026-11-17
+
+AUTH/Projects baseline: https://gitlab.com/hung-it/flow_forge/-/pipelines/3077706299 at c1a7b44, all four jobs including smoke succeeded.
+
+Linux: 79 tests passed; Ruff/mypy passed. Coverage: auth 99.0%, projects 100%, contracts 100%, workflows 99.5%. Greenlet concurrency is configured to measure SQLAlchemy async continuations correctly; thresholds are unchanged. Real TCP HTTP acceptance and workflow migration downgrade/reapply preserving identity/session rows passed. Evidence: reports/workflows-linux.log, workflows-http.log, workflows-coverage.json, workflows-junit.xml.
+
+Full isolated Compose smoke succeeded: reports/ff-foundation-c60b9cc014f1/result.txt and compose.log (77 tests before two additional race/streaming cases; Linux run contains 79). Workflow remote acceptance requires two complete successful pipelines at the final source SHA after documentation updates. Source progress: tasks/plan.md.

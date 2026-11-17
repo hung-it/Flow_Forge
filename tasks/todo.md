@@ -8,8 +8,8 @@
 - [x] Frontend health và Compose
 - [x] GitHub sync / GitLab pipeline configuration
 - [x] Local verification evidence (xem docs/development/verification.md)
-- [ ] Remote GitLab project, deploy key và known hosts configured
-- [ ] GitLab pipeline thành công trên cùng SHA
+- [x] Remote GitLab project, deploy key và known hosts configured
+- [x] GitLab nền AUTH/Projects xanh tại c1a7b44 (pipeline 3077706299)
 - [x] Mermaid render verification
 - [x] Alembic revision template + offline SQL support
 - [x] DAG/message v1 contracts, invalid graph/binding tests
@@ -26,7 +26,8 @@
 - [x] Auth, bootstrap-user, project membership, cross-project tests (nghiệm thu local 2026-11-16)
 - [x] Refresh rotation/replay, session logout, CSRF/cookie và concurrency tests
 - [x] Auth/projects/contracts coverage gates >=80% trên combined PostgreSQL suite
-- [ ] DAG validation và immutable versions
+- [x] Workflow/draft API, DAG validation, handler contracts, immutable versions (local verified)
+- [ ] Hai pipeline GitLab workflow xanh tại cùng SHA bàn giao, gồm smoke
 - [ ] Run persistence, idempotency, concurrent requests
 - [ ] Scheduler/outbox, durable messaging
 - [ ] Worker execution, lease/fencing
