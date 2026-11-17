@@ -2,8 +2,8 @@
 
 Distributed workflow orchestration built with FastAPI, PostgreSQL and RabbitMQ.
 
-**Current status:** infrastructure and DAG/message validation plus Auth/Projects API implementation.
-Workflow execution/retry/cancellation remain planned. See [auth usage](docs/development/auth.md)
+**Current status:** infrastructure and DAG/message validation plus Auth/Projects and Workflow/draft/version APIs.
+Workflow execution/retry/cancellation remain planned. See [workflow API](docs/development/workflows.md), [auth usage](docs/development/auth.md)
 and [verification evidence](docs/development/verification.md) for the tested scope.
 
 Local foundation acceptance passed on 2026-11-15: full checks, clean local clone/install and

@@ -1,6 +1,6 @@
 # Execution contracts v1
 
-DAG/message validation is implemented in `backend/src/flowforge/contracts.py`.
+DAG/message validation and handler payload schemas are implemented in `backend/src/flowforge/contracts.py`.
 Execution, handler resolution and messaging below are design contracts, not running features.
 This document and ADR 004 replace conflicting examples in the original external documents.
 
@@ -23,7 +23,7 @@ Planned handler signature: `async execute(inputs: dict, context: TaskContext) ->
 Context: run/task IDs, attempt number, cancellation signal and stable side-effect key
 `task:{task_run_id}`; no open DB session. Registry supplies concrete input/output Pydantic schemas.
 Validate before execution and before commit. The five allowed handler names reserve the demo
-catalog; their payload schemas/implementations are next-milestone work. No arbitrary config,
+catalog; payload schemas and publication validation are implemented; execution is future work. No arbitrary config,
 output schema, Python/shell code, generic HTTP task or file upload in v1.
 Input/output JSON are objects without secrets. Invalid input/output is permanent; network errors,
 timeouts and unexpected handler exceptions retry within max_attempts with sanitized error codes.
@@ -109,8 +109,8 @@ Shutdown stops new claims, drains within grace, leaves unfinished deliveries una
 | Worker concurrency / DB pool | 1 / pool_size 5, max_overflow 0 | Execution implementation |
 | Backend process memory / PIDs / shutdown | 512 MiB / 128 / 20s | Compose implemented |
 
-Current coverage gate >=80% measures contracts. Add new implemented domain/engine modules to
-the measured set; do not lower threshold or omit them to pass.
+Current coverage gate >=80% measures auth, projects, contracts and workflows separately.
+Add future domain/engine modules to the measured set; do not lower thresholds or omit them.
 
 Sources: [RabbitMQ confirms](https://www.rabbitmq.com/docs/confirms),
 [Pydantic validators](https://docs.pydantic.dev/latest/concepts/validators/),

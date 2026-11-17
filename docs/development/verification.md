@@ -135,6 +135,9 @@ Remote CI chỉ được nghiệm thu sau khi pipeline GitLab chạy thành côn
 
 AUTH/Projects baseline: https://gitlab.com/hung-it/flow_forge/-/pipelines/3077706299 at c1a7b44, all four jobs including smoke succeeded.
 
-Linux: 79 tests passed; Ruff/mypy passed. Coverage: auth 99.0%, projects 100%, contracts 100%, workflows 99.5%. Greenlet concurrency is configured to measure SQLAlchemy async continuations correctly; thresholds are unchanged. Real TCP HTTP acceptance and workflow migration downgrade/reapply preserving identity/session rows passed. Evidence: reports/workflows-linux.log, workflows-http.log, workflows-coverage.json, workflows-junit.xml.
+Final Linux run: 83 tests passed; Ruff/mypy passed. Coverage: auth 99.0%, projects 100%, contracts 100%, workflows 99.5%. Greenlet concurrency is configured to measure SQLAlchemy async continuations correctly; thresholds are unchanged. Real TCP HTTP acceptance and workflow migration downgrade/reapply preserving identity/session rows passed. Evidence: reports/workflows-linux.log, workflows-http.log, workflows-coverage.json, workflows-junit.xml.
 
 Full isolated Compose smoke succeeded: reports/ff-foundation-c60b9cc014f1/result.txt and compose.log (77 tests before two additional race/streaming cases; Linux run contains 79). Workflow remote acceptance requires two complete successful pipelines at the final source SHA after documentation updates. Source progress: tasks/plan.md.
+
+
+Final local checks: check.ps1 succeeded (frontend lint/typecheck/build, 9 diagrams, backend lint/typecheck/unit tests and audits). Existing 7 moderate frontend development-tool findings remain; no high/critical findings. Fresh GitHub clone of 55a43d5 with frozen uv install: 46 unit tests passed (reports/workflows-remote-check.log). Full Compose rerun with the workflow migration preservation drill: reports/ff-foundation-d98b21ece35b/result.txt (80 tests before the final JSONB boundary cases); final Linux 83-test run includes those cases.
