@@ -18,7 +18,8 @@ Scheduler/Outbox là bước tiếp theo sau nghiệm thu.
 - Create run nhận version rõ ràng và JSON object, giới hạn body 64 KiB. Kiểm tra pointer run_input trước khi ghi, kể cả binding ở task hạ nguồn. Kiểm tra kiểu payload và resolve task_output sẽ theo worker.
 - Key tùy chọn, phạm vi project. Replay hợp lệ trả cùng run ID và status hiện tại. Thay đổi request hợp lệ trả 409. Lỗi validation hoặc rollback cho phép dùng lại key. Kiểm tra lại session/membership cả khi replay.
 - Nghiệm thu PostgreSQL local: **100 tests pass**, Ruff và mypy pass. Coverage runs **98,6%**, auth 99,0%, projects 100%, contracts 100%, workflows 99,5%. Test 100 POST đồng thời qua hai instance xác nhận một run, 5 task và 5 dependency. Các ca thu hồi quyền khi chờ khóa, rollback khi insert dependency lỗi và giới hạn UTF-8 chia chunk đều pass.
-- Kế hoạch nghiệm thu: chạy full local Compose smoke, xác nhận hai pipeline GitLab cùng SHA, ghi link và số liệu trước khi chuyển sang Scheduler/Outbox.
+- Hai pipeline đầu trên bb04ad5 gặp audit frontend mức high do advisory mới GHSA-fc5q-39xc-vjpf của picomatch. Lint, typecheck và build frontend pass. Npm và advisory chưa có bản vá tương thích đã phát hành.
+- Smoke tự build Compose nên chỉ chờ job backend qua needs. Frontend audit vẫn bắt buộc và quyết định trạng thái pipeline. Nghiệm thu smoke trên hai pipeline cùng SHA, ghi kết quả audit riêng và tiếp tục theo dõi bản vá để đạt tiêu chí xanh toàn bộ.
 
 ## Nhật ký 2026-11-17 — Workflow/draft/version API
 

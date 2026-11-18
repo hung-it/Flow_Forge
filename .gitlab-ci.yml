@@ -29,6 +29,9 @@ frontend:
     - npm audit --audit-level=high
 smoke:
   stage: smoke
+  needs:
+    - job: backend
+      artifacts: false
   image: docker:29.0.0-cli
   services: [docker:29.0.0-dind]
   variables:
