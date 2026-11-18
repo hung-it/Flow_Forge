@@ -2,9 +2,9 @@
 
 Distributed workflow orchestration built with FastAPI, PostgreSQL and RabbitMQ.
 
-**Current status:** infrastructure, DAG/message validation, Auth/Projects, workflow publication, and Run/Task persistence are implemented. A run stores its graph from a published version with project-scoped idempotency. Scheduler dispatch, worker execution, retries and cancellation are planned.
+**Current status:** Auth/Projects, workflow publication, Run/Task persistence and durable dispatch are implemented. The scheduler queues tasks from published DAGs and the publisher delivers events through RabbitMQ. Worker execution, task retries and cancellation are planned.
 
-See the [Run API](docs/development/runs.md), [Workflow API](docs/development/workflows.md), [auth usage](docs/development/auth.md) and [verification evidence](docs/development/verification.md).
+See the [Run API](docs/development/runs.md), [dispatch operations](docs/development/dispatch.md), [Workflow API](docs/development/workflows.md), [auth usage](docs/development/auth.md) and [verification evidence](docs/development/verification.md).
 
 ## Quick start (PowerShell)
 

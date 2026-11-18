@@ -33,8 +33,9 @@ CPU-bound handlers must run in another process to avoid blocking heartbeat.
 
 ## State and ownership
 
-One scheduler role owns bounded loops for dependency reconciliation, retry/expired leases,
-queued redrive and run completion. Poll every second, batches <=50. No scheduling in API lifespan.
+The scheduler implements dependency reconciliation, initial dispatch, queued redrive and run
+completion. It polls every second in batches of at most 50. Task retry and expired worker leases
+belong to the worker milestone. Process commands own the loops.
 Multiple schedulers use short transactions and conditional updates; lock run first, tasks in UUID
 order, then outbox. Recheck state under lock; SKIP LOCKED for batch claims. No I/O under DB locks.
 Publisher owns outbox claims; workers own task claims, heartbeat and result commit.
@@ -79,8 +80,9 @@ max attempts after crash; fork/join never runs early. These engine tests are not
 
 Single-node durable classic queue, no HA claim. Durable direct exchange `flowforge.tasks.v1`,
 queue `flowforge.tasks.v1`, key `task.execute`; DLX/queue `flowforge.dead.v1`, key `task.invalid`.
-Publisher/worker declare identical topology on startup/reconnect. Persistent JSON, mandatory
-routing, publisher confirms, manual ACK. Prefetch = concurrency, default 1 per worker.
+The publisher declares topology on startup/reconnect and sends persistent JSON with mandatory
+routing and publisher confirms. The future worker reuses that topology, applies manual ACK
+and sets prefetch to concurrency (default 1).
 DispatchMessage envelope max 16 KiB checked before JSON parsing; no input/config/secrets in it.
 Unknown schema version is poison; optional traceparent is W3C v00.
 
@@ -109,7 +111,8 @@ Shutdown stops new claims, drains within grace, leaves unfinished deliveries una
 | Worker concurrency / DB pool | 1 / pool_size 5, max_overflow 0 | Execution implementation |
 | Backend process memory / PIDs / shutdown | 512 MiB / 128 / 20s | Compose implemented |
 
-Current coverage gate >=80% measures auth, projects, contracts and workflows separately.
+Current coverage gate >=80% measures auth, projects, contracts, workflows, runs, scheduler and
+outbox separately.
 Add future domain/engine modules to the measured set; do not lower thresholds or omit them.
 
 Sources: [RabbitMQ confirms](https://www.rabbitmq.com/docs/confirms),

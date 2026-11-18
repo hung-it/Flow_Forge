@@ -29,8 +29,11 @@
 - [x] Workflow/draft API, DAG validation, handler contracts, immutable versions (local verified)
 - [x] Hai pipeline GitLab workflow xanh tại SHA 7acd91f, gồm smoke: 3077760956 và 3077766257 (83 tests/lần)
 - [x] Run/Task persistence, Idempotency-Key và 100 request đồng thời trên PostgreSQL local
-- [ ] Run/Task full Compose smoke và hai pipeline GitLab cùng SHA
-- [ ] Scheduler/outbox, durable messaging
+- [x] Run/Task full Compose smoke local, gồm migration và HTTP acceptance
+- [x] Hai lượt GitLab smoke tại SHA 197d78f, pipeline 3083978303 và 3083978289, 100 tests mỗi lần
+- [ ] Pipeline GitLab xanh toàn bộ sau khi xử lý audit frontend GHSA-fc5q-39xc-vjpf
+- [x] Scheduler/Outbox, durable messaging, claim fencing và redrive trên PostgreSQL/RabbitMQ local
+- [ ] Full Compose smoke và hai lượt GitLab smoke cho Scheduler/Outbox
 - [ ] Worker execution, lease/fencing
 - [ ] Retry, recovery, cancellation, failure injection
 - [ ] Dashboard workflow/run/attempt views

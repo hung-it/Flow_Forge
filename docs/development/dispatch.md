@@ -1,0 +1,11 @@
+# Scheduler and durable dispatch
+
+Migration `0006_scheduler_outbox` adds task dispatch generation and an outbox. The API still creates runs and tasks in PENDING. The existing scheduler process reconciles dependencies, skips descendants of failed tasks, and aggregates terminal results. It selects actionable runs and works in batches of at most 50 tasks. It serializes work on each run with row locks, followed by task locks in UUID order and outbox updates. The first dispatch sets the run to RUNNING and records its start time.
+
+The scheduler commits QUEUED, the generation increment and a `task.execute` outbox row together. PostgreSQL remains available for dispatch while RabbitMQ is offline. After an event has remained published for 60 seconds and the task is still queued at the same generation, the scheduler can schedule the same event again. Redrive preserves event ID, generation and task attempt count.
+
+The publisher uses a durable direct exchange and classic queue named `flowforge.tasks.v1`. It declares the dead-letter exchange and queue `flowforge.dead.v1` with routing key `task.invalid`, a seven-day TTL and a 1,000-message limit. It reestablishes topology on reconnect and publishes persistent v1 envelopes with mandatory routing and publisher confirms. The AMQP message ID matches the event ID.
+
+One event is claimed at a time with a 30-second DB-clock lease. The publisher checks the current run, task, generation and claim before network I/O. Unroutable, negatively acknowledged or uncertain publishes return to PENDING with backoff. Only the current unexpired claim can record confirmation. A crash after the broker accepts a message can cause duplicate delivery with the same identity. At-least-once publication assumes a functioning broker, an available database and a running publisher. Worker execution and receive-side idempotency belong to the next milestone.
+
+The existing process probes remain usable. Local and GitLab smoke stop RabbitMQ, create a run via HTTP, verify its queued task and pending outbox in PostgreSQL, restart RabbitMQ and read the matching persistent message. The migration downgrade drill drops dispatch metadata in a disposable database only. Retain the schema and use a forward fix if dispatch has started in an environment with durable work.

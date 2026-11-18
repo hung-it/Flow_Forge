@@ -9,8 +9,16 @@ Xem [document authority](../docs/source-documents.md).
 
 Foundation, Auth/Projects và Workflow/draft/version API đã nghiệm thu. GitLab smoke của
 commit tài liệu 7d5ef78 cũng xanh ở pipeline 3077804397.
-Run/Task persistence và Idempotency-Key đã triển khai, đang nghiệm thu theo nhật ký bên dưới.
-Scheduler/Outbox là bước tiếp theo sau nghiệm thu.
+Run/Task persistence và Idempotency-Key đã pass test PostgreSQL, full Compose smoke local
+và hai job smoke GitLab tại `197d78f`. Pipeline tổng còn đỏ vì audit frontend.
+Scheduler/Outbox đã triển khai. Mục nghiệm thu của mốc này nằm ngay bên dưới.
+
+## Nhật ký 2026-11-18 — Scheduler/Outbox
+
+- Migration `0006_scheduler_outbox` thêm generation và outbox. Scheduler mở task theo predecessor, lan SKIPPED, chốt run và ghi QUEUED cùng outbox event trong một transaction.
+- Publisher dùng claim lease 30 giây, token fencing, persistent message, mandatory routing và confirm. Redrive sau 60 giây giữ event ID, generation và attempt count. Worker thực thi handler là mốc tiếp theo.
+- Local PostgreSQL + RabbitMQ: **107 tests pass**. Ruff và mypy pass. Scheduler **100%**, Outbox/Publisher **95,6%**, mọi domain vượt gate 80%. Đã xác nhận fork/join, propagation, rollback, lô 50, claim đồng thời, token hết hạn, redrive và mandatory return trên RabbitMQ thật.
+- Full Compose smoke và hai GitLab smoke cùng SHA đang được nghiệm thu. Giữ audit frontend bắt buộc và theo dõi bản vá picomatch.
 
 ## Nhật ký 2026-11-18 — Run/Task persistence và Idempotency-Key
 
@@ -18,8 +26,12 @@ Scheduler/Outbox là bước tiếp theo sau nghiệm thu.
 - Create run nhận version rõ ràng và JSON object, giới hạn body 64 KiB. Kiểm tra pointer run_input trước khi ghi, kể cả binding ở task hạ nguồn. Kiểm tra kiểu payload và resolve task_output sẽ theo worker.
 - Key tùy chọn, phạm vi project. Replay hợp lệ trả cùng run ID và status hiện tại. Thay đổi request hợp lệ trả 409. Lỗi validation hoặc rollback cho phép dùng lại key. Kiểm tra lại session/membership cả khi replay.
 - Nghiệm thu PostgreSQL local: **100 tests pass**, Ruff và mypy pass. Coverage runs **98,6%**, auth 99,0%, projects 100%, contracts 100%, workflows 99,5%. Test 100 POST đồng thời qua hai instance xác nhận một run, 5 task và 5 dependency. Các ca thu hồi quyền khi chờ khóa, rollback khi insert dependency lỗi và giới hạn UTF-8 chia chunk đều pass.
+- Full Compose smoke local **pass**, gồm HTTP publish/tạo/replay/xung đột/đọc task, DB/broker recovery, SIGTERM, migration 0005 round trip bảo toàn dữ liệu cũ và base → head. Bằng chứng trong `reports/ff-foundation-7b170516741f/result.txt`, `coverage.json` và `compose.log`. Chín sơ đồ render và tooling audit pass khi chạy riêng.
 - Hai pipeline đầu trên bb04ad5 gặp audit frontend mức high do advisory mới GHSA-fc5q-39xc-vjpf của picomatch. Lint, typecheck và build frontend pass. Npm và advisory chưa có bản vá tương thích đã phát hành.
-- Smoke tự build Compose nên chỉ chờ job backend qua needs. Frontend audit vẫn bắt buộc và quyết định trạng thái pipeline. Nghiệm thu smoke trên hai pipeline cùng SHA, ghi kết quả audit riêng và tiếp tục theo dõi bản vá để đạt tiêu chí xanh toàn bộ.
+- Smoke tự build Compose nên chỉ chờ job backend qua needs. Frontend audit vẫn bắt buộc. Các lượt đầu gặp timeout khi tải image GHCR/Docker Hub. Commit `197d78f` kéo PostgreSQL và RabbitMQ nối tiếp, thử lại tối đa ba lần cho mỗi lượt kéo và dùng image đã tải khi khởi động.
+- **Hai smoke GitLab pass tại cùng SHA `197d78f`**. Pipeline [3083978303](https://gitlab.com/hung-it/flow_forge/-/pipelines/3083978303) trên nhánh tính năng và [3083978289](https://gitlab.com/hung-it/flow_forge/-/pipelines/3083978289) trên nhánh xác minh CI đều có backend, diagrams và smoke thành công. Mỗi smoke có 100 tests pass, HTTP acceptance, coverage gate, migration bảo toàn dữ liệu cũ và artifact JUnit/coverage/Compose log.
+- `check.ps1` và trạng thái tổng của hai pipeline vẫn đỏ tại audit frontend. Advisory [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf) chưa có bản vá phát hành tại thời điểm kiểm tra. Audit dependency production frontend trả 0 findings khi chạy riêng. Theo dõi bản vá rồi chạy lại gate đầy đủ.
+- Trong phạm vi các ca đã kiểm thử, không còn lỗi nghiệp vụ Run/Task đã biết. Mốc chức năng tiếp theo là Scheduler/Outbox: chuyển task đủ điều kiện sang READY, ghi dispatch và outbox cùng transaction.
 
 ## Nhật ký 2026-11-17 — Workflow/draft/version API
 

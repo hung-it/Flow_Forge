@@ -1,4 +1,5 @@
-"""Infrastructure lifecycle only: no workflow execution is implemented yet."""
+"""Role entry point and lightweight process health checks."""
+
 import argparse
 import asyncio
 import json
@@ -56,8 +57,15 @@ async def run(role: str) -> None:
     loop = asyncio.get_running_loop()
     for name in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(name, stop.set)
-    logger.info("scaffold process starting; execution disabled")
+    logger.info("process starting")
     health_path(role).unlink(missing_ok=True)
+    if role != "worker":
+        try:
+            await run_dispatch_role(role, stop)
+        finally:
+            health_path(role).unlink(missing_ok=True)
+        logger.info("shutdown complete")
+        return
     while not stop.is_set():
         try:
             healthy = await asyncio.wait_for(probe(role), timeout=10)
@@ -65,10 +73,7 @@ async def run(role: str) -> None:
             healthy = False
         logger.info("dependency_status=%s", "ready" if healthy else "unavailable")
         if healthy:
-            target = health_path(role)
-            temporary = target.with_suffix(".tmp")
-            temporary.write_text(json.dumps({"updated_at": time.time()}))
-            temporary.replace(target)
+            mark_healthy(role)
         else:
             health_path(role).unlink(missing_ok=True)
         try:
@@ -77,6 +82,68 @@ async def run(role: str) -> None:
             pass
     health_path(role).unlink(missing_ok=True)
     logger.info("shutdown complete")
+
+
+def mark_healthy(role: str) -> None:
+    target = health_path(role)
+    temporary = target.with_suffix(".tmp")
+    temporary.write_text(json.dumps({"updated_at": time.time()}))
+    temporary.replace(target)
+
+
+async def run_dispatch_role(role: str, stop: asyncio.Event) -> None:
+    from aio_pika.exceptions import AMQPException
+    from sqlalchemy.exc import SQLAlchemyError
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from flowforge.config import Settings
+    from flowforge.outbox.broker import Broker
+    from flowforge.outbox.service import publish_next
+    from flowforge.persistence import check_database
+    from flowforge.scheduler.service import BATCH, reconcile, redrive
+
+    settings = Settings()
+    engine = create_async_engine(
+        settings.database_url,
+        pool_pre_ping=True,
+        pool_size=2,
+        max_overflow=0,
+        pool_timeout=5,
+        connect_args={"timeout": 5, "command_timeout": 5},
+    )
+    broker = Broker(settings.rabbitmq_url) if role == "publisher" else None
+    logger = logging.getLogger(role)
+    try:
+        while not stop.is_set():
+            try:
+                if not await asyncio.wait_for(check_database(engine), timeout=5):
+                    raise RuntimeError("Database schema is not current")
+                if broker is None:
+                    await reconcile(engine)
+                    if not stop.is_set():
+                        await redrive(engine)
+                else:
+                    await broker.ensure()
+                    deadline = time.monotonic() + 1
+                    for _ in range(BATCH):
+                        if stop.is_set() or time.monotonic() >= deadline:
+                            break
+                        if not await publish_next(engine, broker.send):
+                            break
+                mark_healthy(role)
+            except (SQLAlchemyError, AMQPException, OSError, TimeoutError, RuntimeError) as error:
+                health_path(role).unlink(missing_ok=True)
+                logger.warning("dispatch loop unavailable error=%s", type(error).__name__)
+                if broker is not None:
+                    await broker.close()
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=1)
+            except TimeoutError:
+                pass
+    finally:
+        if broker is not None:
+            await broker.close()
+        await engine.dispose()
 
 
 def main() -> None:

@@ -141,3 +141,11 @@ Full isolated Compose smoke succeeded: reports/ff-foundation-c60b9cc014f1/result
 
 
 Final local checks: check.ps1 succeeded (frontend lint/typecheck/build, 9 diagrams, backend lint/typecheck/unit tests and audits). Existing 7 moderate frontend development-tool findings remain; no high/critical findings. Fresh GitHub clone of 55a43d5 with frozen uv install: 46 unit tests passed (reports/workflows-remote-check.log). Full Compose rerun with the workflow migration preservation drill: reports/ff-foundation-d98b21ece35b/result.txt (80 tests before the final JSONB boundary cases); final Linux 83-test run includes those cases.
+
+## Run/Task persistence and idempotency — 2026-11-18
+
+The PostgreSQL suite and isolated Compose smoke passed locally with 100 tests. Run-domain coverage was 98.6% against an 80% gate. Coverage remained above the gate for every other domain. One hundred concurrent POSTs through two API instances reused one run, five tasks and five dependencies. HTTP replay, conflict, authorization, rollback, broker and database recovery, SIGTERM, and migration drills passed. Local evidence is in `reports/ff-foundation-7b170516741f/`.
+
+At `197d78f`, both GitLab smoke jobs passed with 100 tests each, including real HTTP, coverage gates and the migration round trip preserving identity, project, draft and version data. Both uploaded JUnit, coverage and Compose logs. [Feature branch smoke](https://gitlab.com/hung-it/flow_forge/-/jobs/18143413296) · [Independent verification smoke](https://gitlab.com/hung-it/flow_forge/-/jobs/18143413189).
+
+The overall GitLab pipelines and local `check.ps1` still fail on the mandatory full frontend audit. Frontend lint, typecheck and build passed and a separate production dependency audit reported zero findings. The new high-severity finding is in the development dependency tree, and the advisory lists no patched picomatch release at verification time. [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf).

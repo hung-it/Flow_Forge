@@ -24,7 +24,7 @@ async def counts() -> dict[str, int]:
         await engine.dispose()
 
 
-async def snapshots() -> dict[str, list[str]]:
+async def snapshots(include_runs: bool = False) -> dict[str, list[str]]:
     engine = create_async_engine(Settings().database_url)
     tables = (
         "users",
@@ -37,13 +37,16 @@ async def snapshots() -> dict[str, list[str]]:
         "workflow_drafts",
         "workflow_versions",
     )
+    if include_runs:
+        tables += ("workflow_runs", "task_runs", "task_dependencies")
     try:
         async with engine.connect() as conn:
             return {
                 table: list(
                     (
                         await conn.execute(
-                            text(f"SELECT row_to_json(t)::text FROM {table} t ORDER BY 1")
+                            text(f"""SELECT (to_jsonb(t) - 'dispatch_generation')::text
+                                FROM {table} t ORDER BY 1""")
                         )
                     ).scalars()
                 )
@@ -54,6 +57,15 @@ async def snapshots() -> dict[str, list[str]]:
 
 
 def main() -> None:
+    existing_runs = asyncio.run(snapshots(include_runs=True))
+    assert all(
+        existing_runs[table] for table in ("workflow_runs", "task_runs", "task_dependencies")
+    )
+    subprocess.run(["alembic", "downgrade", "0005_runs"], check=True)
+    assert asyncio.run(snapshots(include_runs=True)) == existing_runs
+    subprocess.run(["alembic", "upgrade", "head"], check=True)
+    assert asyncio.run(snapshots(include_runs=True)) == existing_runs
+    print("PASS: scheduler migration round trip preserves run/task/dependency rows")
     saved = asyncio.run(snapshots())
     assert all(
         saved[table] for table in ("users", "projects", "workflow_drafts", "workflow_versions")

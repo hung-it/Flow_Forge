@@ -95,9 +95,13 @@ def main():
         assert status("/health/ready") == 200
         compose("exec", "-T", "api", "python", "-m", "flowforge.process",
                 "scheduler", "--probe")
+        print(compose("exec", "-T", "api", "python", "integration/dispatch_acceptance.py",
+                      "outage"), flush=True)
         compose("up", "-d", "--wait", "rabbitmq")
         eventually(lambda: healthy("worker"))
         eventually(lambda: healthy("publisher"))
+        print(compose("exec", "-T", "api", "python", "integration/dispatch_acceptance.py",
+                      "recovery"), flush=True)
         print("Broker outage/recovery passed", flush=True)
 
         compose("stop", "postgres")

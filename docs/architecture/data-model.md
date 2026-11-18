@@ -2,7 +2,7 @@
 
 UUID cho mọi ID; TIMESTAMPTZ UTC cho timestamps; JSONB cho payload. Khóa chính theo từng bảng. Cột không ghi nullable là NOT NULL.
 Identity migrate ở 0001_identity, canonical email/one-owner index bổ sung ở 0002_identity_guards.
-Migration 0004 tạo workflow/draft/version. Migration 0005 tạo run/task/dependencies. Các bảng attempt/outbox/audit vẫn là thiết kế đích.
+Migration 0004 tạo workflow/draft/version. Migration 0005 tạo run/task/dependencies. Migration 0006 thêm generation và outbox. Các bảng attempt/audit vẫn là thiết kế đích.
 Migration 0003_auth_sessions bổ sung auth_sessions, refresh_tokens và login_counters (đã triển khai).
 
 | Bảng | Cột và constraints |
@@ -40,7 +40,7 @@ Migration 0003_auth_sessions bổ sung auth_sessions, refresh_tokens và login_c
   next_run_at; attempt count never negative. RUNNING attempts have null finished_at; terminal attempts
   and terminal runs require finished_at. Outbox CLAIMED requires token/deadline, PUBLISHED requires
   published_at. Constraints are added together with each feature migration, not on nonexistent tables.
-- Target outbox: status also includes OBSOLETE; add created_at, last_redriven_at nullable and publish_attempts.
+- Outbox 0006 includes OBSOLETE, created_at, last_redriven_at and publish_attempts.
   Redrive reuses current event/generation; PUBLISHED->PENDING is a controlled redrive transition.
 - MVP retention: no automatic deletion of runs, attempts, versions, audit or unpublished outbox.
   Idempotency keys live with runs; no key TTL. Published/obsolete outbox also retained until a measured
