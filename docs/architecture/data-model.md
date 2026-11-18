@@ -2,7 +2,7 @@
 
 UUID cho mọi ID; TIMESTAMPTZ UTC cho timestamps; JSONB cho payload. Khóa chính theo từng bảng. Cột không ghi nullable là NOT NULL.
 Identity migrate ở 0001_identity, canonical email/one-owner index bổ sung ở 0002_identity_guards.
-Migration 0004 tạo workflow/draft/version. Migration 0005 tạo run/task/dependencies. Migration 0006 thêm generation và outbox. Các bảng attempt/audit vẫn là thiết kế đích.
+Migration 0004 tạo workflow/draft/version. Migration 0005 tạo run/task/dependencies. Migration 0006 thêm generation và outbox. Migration 0007 thêm worker lease/retry, kết quả task và attempt. Bảng audit vẫn là thiết kế đích.
 Migration 0003_auth_sessions bổ sung auth_sessions, refresh_tokens và login_counters (đã triển khai).
 
 | Bảng | Cột và constraints |
@@ -18,7 +18,7 @@ Migration 0003_auth_sessions bổ sung auth_sessions, refresh_tokens và login_c
 | workflow_runs | id UUID PK; composite FKs(project_id,workflow_id)->definitions(project_id,id), (workflow_id,workflow_version_id)->versions(workflow_id,id); created_by UUID FK users; status default PENDING; input_json object JSONB; input_hash SHA-256; idempotency_key nullable; created_at, started_at/finished_at nullable; partial unique index(project_id,idempotency_key) |
 | task_runs | id UUID PK; run_id FK runs; node_key TEXT; status default PENDING; attempt_count INTEGER default 0 CHECK >=0; UNIQUE(run_id,node_key); UNIQUE(run_id,id). Dispatch, lease, retry and result fields are added with execution. |
 | task_dependencies | composite PK(run_id,predecessor_task_id,successor_task_id); composite FKs for both endpoints reference task_runs(run_id,id); CHECK predecessor != successor |
-| task_attempts | id UUID PK; task_run_id FK task_runs; attempt_no INTEGER CHECK >0; worker_id TEXT; lease_token UUID; status TEXT CHECK attempt states; error JSONB nullable; started_at timestamp; finished_at timestamp nullable; UNIQUE(task_run_id,attempt_no) |
+| task_attempts | id UUID PK; task_run_id FK task_runs; attempt_no INTEGER CHECK >0; dispatch_generation INTEGER CHECK >0; worker_id TEXT; lease_token UUID; status TEXT CHECK attempt states; error_code TEXT nullable; started_at timestamp; finished_at timestamp nullable; UNIQUE(task_run_id,attempt_no); one RUNNING attempt per task |
 | outbox_events | id UUID PK (event_id); task_run_id FK task_runs; dispatch_generation INTEGER; event_type TEXT; payload JSONB; status TEXT CHECK PENDING/CLAIMED/PUBLISHED/OBSOLETE; available_at/created_at timestamp; claim_token UUID nullable; claim_until/published_at/last_redriven_at timestamp nullable; publish_attempts INTEGER default 0 CHECK >=0; UNIQUE(task_run_id,dispatch_generation,event_type) |
 | audit_events | id UUID PK; project_id FK projects; actor_id FK users nullable for system; action TEXT; metadata_json JSONB; created_at timestamp |
 

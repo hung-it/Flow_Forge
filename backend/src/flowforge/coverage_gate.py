@@ -16,6 +16,7 @@ def main() -> None:
         "runs/",
         "scheduler/",
         "outbox/",
+        "worker/",
     ):
         summaries = [
             item["summary"]

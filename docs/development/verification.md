@@ -149,3 +149,9 @@ The PostgreSQL suite and isolated Compose smoke passed locally with 100 tests. R
 At `197d78f`, both GitLab smoke jobs passed with 100 tests each, including real HTTP, coverage gates and the migration round trip preserving identity, project, draft and version data. Both uploaded JUnit, coverage and Compose logs. [Feature branch smoke](https://gitlab.com/hung-it/flow_forge/-/jobs/18143413296) · [Independent verification smoke](https://gitlab.com/hung-it/flow_forge/-/jobs/18143413189).
 
 The overall GitLab pipelines and local `check.ps1` still fail on the mandatory full frontend audit. Frontend lint, typecheck and build passed and a separate production dependency audit reported zero findings. The new high-severity finding is in the development dependency tree, and the advisory lists no patched picomatch release at verification time. [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf).
+
+## Scheduler/Outbox — 2026-11-18
+
+Local PostgreSQL and RabbitMQ checks passed all 107 tests. Coverage was 100% for Scheduler and 95.6% for Publisher/Outbox. All domains passed their 80% gates. Ruff and mypy passed. Isolated Compose smoke passed HTTP dispatch during broker outage, confirmed delivery of the same event after recovery, database recovery, SIGTERM and migration round trips. Local evidence is in `reports/ff-foundation-7c8eb1b489e3/`.
+
+Both GitLab smoke jobs passed at `d0b3d3c` with 107 tests each, broker stop/start and delivery checks, and migration preservation of run, task and dependency rows. Both pipelines passed backend and diagrams. The frontend audit remains a failing gate. [Feature smoke](https://gitlab.com/hung-it/flow_forge/-/jobs/18144601641) · [Independent smoke](https://gitlab.com/hung-it/flow_forge/-/jobs/18144603776).

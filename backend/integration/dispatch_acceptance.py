@@ -97,19 +97,55 @@ async def main(stage: str) -> None:
     settings = Settings()
     engine = create_async_engine(settings.database_url)
     try:
-        if stage == "outage":
+        if stage in {"outage", "backlog"}:
             run_id = await seed(engine)
             pending = await wait_event(engine, run_id, "PENDING")
             RUN_FILE.write_text(f"{run_id} {pending}", encoding="utf-8")
-            print("PASS: scheduler committed QUEUED and pending outbox during broker outage")
+            print(f"PASS: scheduler committed QUEUED and pending outbox in {stage} stage")
         elif stage == "recovery":
             run_id, pending = map(UUID, RUN_FILE.read_text(encoding="utf-8").split())
             confirmed = await wait_event(engine, run_id, "PUBLISHED")
             assert confirmed == pending
             await verify_delivery(settings, run_id, confirmed)
             print("PASS: publisher confirmed and delivered the same outbox event after recovery")
+        elif stage == "execution":
+            run_id, pending = map(UUID, RUN_FILE.read_text(encoding="utf-8").split())
+            async with asyncio.timeout(90):
+                while True:
+                    async with engine.connect() as conn:
+                        status = await conn.scalar(
+                            text("SELECT status FROM workflow_runs WHERE id=:id"), {"id": run_id}
+                        )
+                    assert status != "FAILED", "Fixture execution failed"
+                    if status == "SUCCEEDED":
+                        break
+                    await asyncio.sleep(0.25)
+            async with engine.connect() as conn:
+                tasks = await conn.execute(
+                    text("""SELECT t.node_key,t.status,t.attempt_count,
+                    t.dispatch_generation,t.result_json->>'report_text' AS report
+                    FROM task_runs t WHERE t.run_id=:id"""),
+                    {"id": run_id},
+                )
+                by_node = {task.node_key: task for task in tasks}
+                assert len(by_node) == 5
+                assert all(
+                    task.status == "SUCCEEDED"
+                    and task.attempt_count == 1
+                    and task.dispatch_generation == 1
+                    for task in by_node.values()
+                )
+                assert by_node["report"].report == "Outage: 1 words, 1 lines, 7 characters"
+                event = await conn.scalar(
+                    text("""SELECT e.id FROM outbox_events e
+                    JOIN task_runs t ON t.id=e.task_run_id WHERE t.run_id=:run
+                    AND t.node_key='validate' AND e.dispatch_generation=1"""),
+                    {"run": run_id},
+                )
+                assert event == pending
+            print("PASS: worker executed migrated backlog from original dispatch to report")
         else:
-            raise ValueError("Expected outage or recovery")
+            raise ValueError("Expected outage, recovery, backlog or execution")
     finally:
         await engine.dispose()
 

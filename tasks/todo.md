@@ -33,8 +33,9 @@
 - [x] Hai lượt GitLab smoke tại SHA 197d78f, pipeline 3083978303 và 3083978289, 100 tests mỗi lần
 - [ ] Pipeline GitLab xanh toàn bộ sau khi xử lý audit frontend GHSA-fc5q-39xc-vjpf
 - [x] Scheduler/Outbox, durable messaging, claim fencing và redrive trên PostgreSQL/RabbitMQ local
-- [ ] Full Compose smoke và hai lượt GitLab smoke cho Scheduler/Outbox
-- [ ] Worker execution, lease/fencing
-- [ ] Retry, recovery, cancellation, failure injection
+- [x] Full Compose smoke và hai lượt GitLab smoke cho Scheduler/Outbox tại d0b3d3c (3084131219, 3084131467, 107 tests/lần)
+- [x] Worker execution, lease/fencing, retry và recovery trong giới hạn snapshot đã qua test local
+- [ ] Full Compose smoke và hai lượt GitLab smoke cho Worker
+- [ ] Cancellation và failure injection mở rộng
 - [ ] Dashboard workflow/run/attempt views
 - [ ] Metrics/traces, benchmark, release video

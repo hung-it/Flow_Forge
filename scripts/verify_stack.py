@@ -87,7 +87,8 @@ def main():
                       "/tmp/coverage.json"), flush=True)
         compose("cp", "api:/tmp/coverage.json", str(reports / "coverage.json"))
         print(compose("exec", "-T", "api", "python", "integration/http_acceptance.py"), flush=True)
-        compose("up", "-d", "--no-build", "--wait", "--wait-timeout", "180")
+        compose("up", "-d", "--no-build", "--wait", "--wait-timeout", "180",
+                "scheduler", "publisher", "frontend")
 
         compose("stop", "rabbitmq")
         compose("exec", "-T", "api", "python", "-m", "flowforge.process",
@@ -98,11 +99,20 @@ def main():
         print(compose("exec", "-T", "api", "python", "integration/dispatch_acceptance.py",
                       "outage"), flush=True)
         compose("up", "-d", "--wait", "rabbitmq")
-        eventually(lambda: healthy("worker"))
         eventually(lambda: healthy("publisher"))
         print(compose("exec", "-T", "api", "python", "integration/dispatch_acceptance.py",
                       "recovery"), flush=True)
         print("Broker outage/recovery passed", flush=True)
+
+        compose("stop", "publisher")
+        print(compose("exec", "-T", "api", "python", "integration/dispatch_acceptance.py",
+                      "backlog"), flush=True)
+        compose("stop", "api", "scheduler", "frontend")
+        print(compose("run", "--rm", "--no-deps", "api", "python",
+                      "integration/migration_acceptance.py", "worker"), flush=True)
+        compose("up", "-d", "--no-build", "--wait", "--wait-timeout", "180")
+        print(compose("exec", "-T", "api", "python", "integration/dispatch_acceptance.py",
+                      "execution"), flush=True)
 
         compose("stop", "postgres")
         assert status("/health/live") == 200
@@ -118,6 +128,8 @@ def main():
         assert "shutdown complete" in compose("logs", "scheduler")
         compose("up", "-d", "--wait", "scheduler")
 
+        eventually(lambda: sql("SELECT count(*) FROM task_runs WHERE status IN "
+                               "('RUNNING','RETRY_WAIT')") == "0")
         compose("stop", "api", "scheduler", "publisher", "worker", "frontend")
         compose("run", "--rm", "api", "python", "integration/migration_acceptance.py")
         compose("run", "--rm", "migrate", "alembic", "downgrade", "base")

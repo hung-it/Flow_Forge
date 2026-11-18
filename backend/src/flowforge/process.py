@@ -46,9 +46,6 @@ async def probe(role: str) -> bool:
 
 
 async def run(role: str) -> None:
-    from aio_pika.exceptions import AMQPException
-    from sqlalchemy.exc import SQLAlchemyError
-
     from flowforge.observability import configure_logging
 
     configure_logging()
@@ -59,28 +56,13 @@ async def run(role: str) -> None:
         loop.add_signal_handler(name, stop.set)
     logger.info("process starting")
     health_path(role).unlink(missing_ok=True)
-    if role != "worker":
-        try:
-            await run_dispatch_role(role, stop)
-        finally:
-            health_path(role).unlink(missing_ok=True)
-        logger.info("shutdown complete")
-        return
-    while not stop.is_set():
-        try:
-            healthy = await asyncio.wait_for(probe(role), timeout=10)
-        except (SQLAlchemyError, AMQPException, OSError, TimeoutError):
-            healthy = False
-        logger.info("dependency_status=%s", "ready" if healthy else "unavailable")
-        if healthy:
-            mark_healthy(role)
+    try:
+        if role == "worker":
+            await run_worker(stop)
         else:
-            health_path(role).unlink(missing_ok=True)
-        try:
-            await asyncio.wait_for(stop.wait(), timeout=5)
-        except TimeoutError:
-            pass
-    health_path(role).unlink(missing_ok=True)
+            await run_dispatch_role(role, stop)
+    finally:
+        health_path(role).unlink(missing_ok=True)
     logger.info("shutdown complete")
 
 
@@ -89,6 +71,37 @@ def mark_healthy(role: str) -> None:
     temporary = target.with_suffix(".tmp")
     temporary.write_text(json.dumps({"updated_at": time.time()}))
     temporary.replace(target)
+
+
+async def run_worker(stop: asyncio.Event) -> None:
+    from socket import gethostname
+    from uuid import uuid4
+
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from flowforge.config import Settings
+    from flowforge.worker.consumer import consume
+
+    settings = Settings()
+    engine = create_async_engine(
+        settings.database_url,
+        pool_pre_ping=True,
+        pool_size=2,
+        max_overflow=0,
+        pool_timeout=5,
+        connect_args={"timeout": 5, "command_timeout": 5},
+    )
+
+    def progress(healthy: bool) -> None:
+        if healthy:
+            mark_healthy("worker")
+        else:
+            health_path("worker").unlink(missing_ok=True)
+
+    try:
+        await consume(engine, settings.rabbitmq_url, f"{gethostname()}:{uuid4()}", stop, progress)
+    finally:
+        await engine.dispose()
 
 
 async def run_dispatch_role(role: str, stop: asyncio.Event) -> None:
@@ -101,6 +114,7 @@ async def run_dispatch_role(role: str, stop: asyncio.Event) -> None:
     from flowforge.outbox.service import publish_next
     from flowforge.persistence import check_database
     from flowforge.scheduler.service import BATCH, reconcile, redrive
+    from flowforge.worker.service import recover
 
     settings = Settings()
     engine = create_async_engine(
@@ -119,6 +133,9 @@ async def run_dispatch_role(role: str, stop: asyncio.Event) -> None:
                 if not await asyncio.wait_for(check_database(engine), timeout=5):
                     raise RuntimeError("Database schema is not current")
                 if broker is None:
+                    await recover(engine)
+                    if stop.is_set():
+                        break
                     await reconcile(engine)
                     if not stop.is_set():
                         await redrive(engine)

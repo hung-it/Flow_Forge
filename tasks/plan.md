@@ -11,14 +11,25 @@ Foundation, Auth/Projects và Workflow/draft/version API đã nghiệm thu. GitL
 commit tài liệu 7d5ef78 cũng xanh ở pipeline 3077804397.
 Run/Task persistence và Idempotency-Key đã pass test PostgreSQL, full Compose smoke local
 và hai job smoke GitLab tại `197d78f`. Pipeline tổng còn đỏ vì audit frontend.
-Scheduler/Outbox đã triển khai. Mục nghiệm thu của mốc này nằm ngay bên dưới.
+Scheduler/Outbox đã pass full Compose smoke local và hai job smoke GitLab tại `d0b3d3c`.
+Worker execution, lease fencing và retry đã triển khai. Mục nghiệm thu nằm ngay bên dưới.
+
+## Nhật ký 2026-11-18 — Worker execution và lease fencing
+
+- Migration `0007_worker_execution` bổ sung task lease/deadline, retry, result và attempt. Worker claim theo run/task/event/generation. Mỗi attempt có token mới, lease 30 giây và heartbeat 10 giây giới hạn bởi hard deadline.
+- Worker chạy năm handler demo từ snapshot đã publish, validate binding và output, commit có fencing rồi ACK. Scheduler thu hồi lease, phân loại mất worker/timeout và retry theo snapshot. API cancel thuộc mốc sau.
+- PostgreSQL và RabbitMQ thật chạy **118 tests pass**, Worker **88,7% coverage**. Ruff, mypy và tất cả gate 80% pass. Bốn consumer dùng RabbitMQ thật kiểm tra linear/fork-join, duplicate và DLQ. Các ca commit/ACK/DB fault và lease hết hạn đã được kiểm chứng.
+- Đang nghiệm thu full Compose smoke và hai GitLab smoke cùng SHA, gồm kiểm tra worker xử lý backlog sau migration 0007. Audit frontend bắt buộc vẫn báo picomatch, audit dependency production báo 0.
 
 ## Nhật ký 2026-11-18 — Scheduler/Outbox
 
 - Migration `0006_scheduler_outbox` thêm generation và outbox. Scheduler mở task theo predecessor, lan SKIPPED, chốt run và ghi QUEUED cùng outbox event trong một transaction.
 - Publisher dùng claim lease 30 giây, token fencing, persistent message, mandatory routing và confirm. Redrive sau 60 giây giữ event ID, generation và attempt count. Worker thực thi handler là mốc tiếp theo.
 - Local PostgreSQL + RabbitMQ: **107 tests pass**. Ruff và mypy pass. Scheduler **100%**, Outbox/Publisher **95,6%**, mọi domain vượt gate 80%. Đã xác nhận fork/join, propagation, rollback, lô 50, claim đồng thời, token hết hạn, redrive và mandatory return trên RabbitMQ thật.
-- Full Compose smoke và hai GitLab smoke cùng SHA đang được nghiệm thu. Giữ audit frontend bắt buộc và theo dõi bản vá picomatch.
+- Full Compose smoke local **pass**. Tạo run qua HTTP khi RabbitMQ tắt, quan sát QUEUED và outbox PENDING trong DB, rồi nhận cùng persistent event sau khi RabbitMQ phục hồi. DB outage/recovery, SIGTERM, migration round trip và cleanup đều pass. Evidence `reports/ff-foundation-7c8eb1b489e3/`.
+- **Hai GitLab smoke pass tại `d0b3d3c`**. Pipeline [3084131219](https://gitlab.com/hung-it/flow_forge/-/pipelines/3084131219) trên nhánh tính năng và [3084131467](https://gitlab.com/hung-it/flow_forge/-/pipelines/3084131467) trên nhánh xác minh đều có 107 tests pass, coverage gate, HTTP acceptance, broker recovery và migration bảo toàn run/task/dependency. Backend và diagrams pass.
+- Pipeline tổng vẫn đỏ ở `npm audit --audit-level=high` của frontend. Advisory [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf) trên picomatch còn mở. Audit dependency production chạy riêng báo 0 findings. Giữ gate và theo dõi bản vá.
+- Trong các ca đã kiểm thử, không còn lỗi Scheduler/Outbox đã biết. Mốc tiếp theo là Worker claim, nhận dạng event/generation và fenced commit trước ACK.
 
 ## Nhật ký 2026-11-18 — Run/Task persistence và Idempotency-Key
 

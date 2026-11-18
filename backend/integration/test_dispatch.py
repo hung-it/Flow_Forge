@@ -28,6 +28,12 @@ async def dispatch(setup):
         async with engine.begin() as conn:
             params = {"workflow": workflow_id}
             await conn.execute(
+                text("""DELETE FROM task_attempts a USING task_runs t,
+                workflow_runs r WHERE a.task_run_id=t.id AND t.run_id=r.id
+                AND r.workflow_id=:workflow"""),
+                params,
+            )
+            await conn.execute(
                 text("""DELETE FROM outbox_events e USING task_runs t,
                 workflow_runs r WHERE e.task_run_id=t.id AND t.run_id=r.id
                 AND r.workflow_id=:workflow"""),

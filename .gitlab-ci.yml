@@ -65,11 +65,17 @@ smoke:
     - docker compose exec -T api pytest tests integration -q --junitxml=/tmp/integration.xml --cov=flowforge --cov-report=json:/tmp/coverage.json
     - docker compose exec -T api python -m flowforge.coverage_gate /tmp/coverage.json
     - docker compose exec -T api python integration/http_acceptance.py
-    - docker compose up -d --no-build --wait
+    - docker compose up -d --no-build --wait scheduler publisher frontend
     - docker compose stop rabbitmq
     - docker compose exec -T api python integration/dispatch_acceptance.py outage
     - docker compose up -d --wait rabbitmq
     - docker compose exec -T api python integration/dispatch_acceptance.py recovery
+    - docker compose stop publisher
+    - docker compose exec -T api python integration/dispatch_acceptance.py backlog
+    - docker compose stop api scheduler frontend
+    - docker compose run --rm --no-deps api python integration/migration_acceptance.py worker
+    - docker compose up -d --no-build --wait
+    - docker compose exec -T api python integration/dispatch_acceptance.py execution
     - docker compose cp api:/tmp/integration.xml reports/integration.xml
     - docker compose cp api:/tmp/coverage.json reports/coverage.json
     - docker compose stop api scheduler publisher worker frontend
