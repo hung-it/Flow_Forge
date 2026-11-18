@@ -45,7 +45,19 @@ smoke:
     - printf '\nFLOWFORGE_JWT_SECRET=%s\n' "$(head -c 48 /dev/urandom | base64 | tr -d '\n')" >> .env
     - docker compose build api
     - docker compose build frontend
-    - docker compose up -d --no-build --wait
+    - |
+      for service in postgres rabbitmq; do
+        for attempt in 1 2 3; do
+          if docker compose pull "$service"; then
+            break
+          fi
+          if [ "$attempt" -eq 3 ]; then
+            exit 1
+          fi
+          sleep "$((attempt * 5))"
+        done
+      done
+    - docker compose up -d --no-build --pull never --wait
     - docker compose exec -T api python -m flowforge.process worker --probe
     - docker compose exec -T api python -m flowforge.process scheduler --probe
     - mkdir -p reports
@@ -67,7 +79,11 @@ smoke:
     - docker compose cp api:/tmp/integration.xml reports/integration.xml || true
     - docker compose cp api:/tmp/coverage.json reports/coverage.json || true
     - docker compose ps -a > compose-status.log
-    - docker inspect --format '{{json .State}}' $(docker compose ps -aq) > container-diagnostics.json
+    - |
+      containers=$(docker compose ps -aq)
+      if [ -n "$containers" ]; then
+        docker inspect --format '{{json .State}}' $containers > container-diagnostics.json
+      fi
     - docker compose logs --no-color > compose.log
     - docker compose down -v
   artifacts:
