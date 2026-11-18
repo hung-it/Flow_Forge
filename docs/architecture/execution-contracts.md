@@ -51,7 +51,7 @@ physical handler execution may continue. No compensation of external effects.
 
 | Owner / operation | Atomic writes and guards |
 |---|---|
-| API / create run | Check membership, version/workflow/project; insert run/tasks/dependencies. Unique project/key claims idempotency; on conflict read committed winner in a new transaction. Same hash returns run, different hash 409. |
+| API / create run | Recheck session and membership under locks, then validate version and run-input pointers. Insert a PENDING run, tasks and direct dependencies in one transaction. The project/key index arbitrates duplicates. On conflict, read the committed row in a separate statement in the current Read Committed transaction. Same fingerprint returns the run, different fingerprint returns 409. |
 | Scheduler / dispatch | Active run + READY task; increment generation, QUEUED and one outbox event in same transaction. |
 | Publisher / claim | PENDING/due or expired CLAIMED event; assign claim token/deadline, commit before network. |
 | Publisher / finish | Mandatory routing + confirm; mark PUBLISHED only with current claim token. Nack/return/timeout keeps event recoverable with backoff. |
@@ -103,7 +103,7 @@ Shutdown stops new claims, drains within grace, leaves unfinished deliveries una
 | Nodes / edges / bindings per node | 100 / 500 / 32 | Implemented Pydantic contract |
 | Timeout / attempts | 1–300s default 60 / 1–5 default 3 | Contract implemented; runtime later |
 | Retry | initial 1s, multiplier 2, cap 30s; allowed cap <=300s | Contract ranges implemented; scheduling later |
-| DAG body / run input / task output | 256 / 64 / 64 KiB | Add at HTTP/handler boundary before parsing/commit |
+| DAG body / run creation body / task output | 256 / 64 / 64 KiB | HTTP limits are enforced before parsing. Task output limit belongs to the worker. |
 | Message | 16 KiB | Add in consumer before parsing |
 | Lease / heartbeat | 30s / 10s | Worker implementation |
 | Worker concurrency / DB pool | 1 / pool_size 5, max_overflow 0 | Execution implementation |

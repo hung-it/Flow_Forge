@@ -2,14 +2,9 @@
 
 Distributed workflow orchestration built with FastAPI, PostgreSQL and RabbitMQ.
 
-**Current status:** infrastructure and DAG/message validation plus Auth/Projects and Workflow/draft/version APIs.
-Workflow execution/retry/cancellation remain planned. See [workflow API](docs/development/workflows.md), [auth usage](docs/development/auth.md)
-and [verification evidence](docs/development/verification.md) for the tested scope.
+**Current status:** infrastructure, DAG/message validation, Auth/Projects, workflow publication, and Run/Task persistence are implemented. A run stores its graph from a published version with project-scoped idempotency. Scheduler dispatch, worker execution, retries and cancellation are planned.
 
-Local foundation acceptance passed on 2026-11-15: full checks, clean local clone/install and
-isolated Compose migration/outage recovery. Auth/Projects local acceptance passed on 2026-11-16
-(63 tests plus real HTTP, migration and recovery drills). GitLab project exists; verified sync/runner/
-remote pipeline remain pending while GitHub Actions is billing-locked. See [verification evidence](docs/development/verification.md).
+See the [Run API](docs/development/runs.md), [Workflow API](docs/development/workflows.md), [auth usage](docs/development/auth.md) and [verification evidence](docs/development/verification.md).
 
 ## Quick start (PowerShell)
 

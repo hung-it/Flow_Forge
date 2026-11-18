@@ -1,16 +1,24 @@
 # FlowForge — Plan v2 và nhật ký tiến trình
 
-Cập nhật **2026-11-17** (Asia/Ho_Chi_Minh). File theo dõi chính sau mỗi buổi làm việc.
+Cập nhật **2026-11-18** (Asia/Ho_Chi_Minh). File theo dõi chính sau mỗi buổi làm việc.
 FlowForge **10 tuần**, tổng hai project **19 tuần**, 12–15 giờ/tuần.
 Tài liệu trong repo là nguồn duy trì; hai tài liệu ngoài repo là đề xuất v1.
 Xem [document authority](../docs/source-documents.md).
 
 ## Trạng thái hiện tại
 
-Foundation, Auth/Projects và Workflow/draft/version API đã có code, migration và tests.
-Remote nền AUTH/Projects tại c1a7b44 đã xanh cả smoke (pipeline 3077706299).
-Workflow đang nghiệm thu remote; chi tiết phiên hiện tại ở nhật ký 2026-11-17 cuối file.
-Run/task persistence, scheduler/worker thực thi và login UI là các bước sau.
+Foundation, Auth/Projects và Workflow/draft/version API đã nghiệm thu. GitLab smoke của
+commit tài liệu 7d5ef78 cũng xanh ở pipeline 3077804397.
+Run/Task persistence và Idempotency-Key đã triển khai, đang nghiệm thu theo nhật ký bên dưới.
+Scheduler/Outbox là bước tiếp theo sau nghiệm thu.
+
+## Nhật ký 2026-11-18 — Run/Task persistence và Idempotency-Key
+
+- Migration 0005 tạo run, task và dependency từ version đã publish. Cả ba bảng được ghi trong một transaction, trạng thái ban đầu PENDING. Composite FK giữ đúng project/workflow/version và ngăn dependency nối hai run.
+- Create run nhận version rõ ràng và JSON object, giới hạn body 64 KiB. Kiểm tra pointer run_input trước khi ghi, kể cả binding ở task hạ nguồn. Kiểm tra kiểu payload và resolve task_output sẽ theo worker.
+- Key tùy chọn, phạm vi project. Replay hợp lệ trả cùng run ID và status hiện tại. Thay đổi request hợp lệ trả 409. Lỗi validation hoặc rollback cho phép dùng lại key. Kiểm tra lại session/membership cả khi replay.
+- Nghiệm thu PostgreSQL local: **100 tests pass**, Ruff và mypy pass. Coverage runs **98,6%**, auth 99,0%, projects 100%, contracts 100%, workflows 99,5%. Test 100 POST đồng thời qua hai instance xác nhận một run, 5 task và 5 dependency. Các ca thu hồi quyền khi chờ khóa, rollback khi insert dependency lỗi và giới hạn UTF-8 chia chunk đều pass.
+- Kế hoạch nghiệm thu: chạy full local Compose smoke, xác nhận hai pipeline GitLab cùng SHA, ghi link và số liệu trước khi chuyển sang Scheduler/Outbox.
 
 ## Nhật ký 2026-11-17 — Workflow/draft/version API
 
@@ -158,8 +166,8 @@ Nhật ký bên dưới ghi kết quả trước restart; các trạng thái run
    Chờ billing lock được gỡ, rerun GitHub sync và kiểm chứng GitLab pipeline đúng SHA/remote clone.
 2. Workflow/version API: dùng WorkflowSpec, limits trước parse, defaults snapshot/checksum,
    handler payload schemas và immutable version tests.
-3. Runs/idempotency: bảng runs/tasks/dependencies và composite FK/CHECKs; binding resolution;
-   100 requests cùng key tạo một run, payload khác trả 409.
+3. Runs/idempotency: bảng runs/tasks/dependencies và composite FK/CHECKs; kiểm tra pointer
+   run_input khi tạo run. 100 requests cùng key tạo một run, payload khác trả 409.
 4. Scheduler/outbox: atomic dispatch, DB polling, confirms/mandatory routing; same-generation redrive,
    backlog >60s và broker outage không mất committed work.
 5. Worker/reliability: registry, claims/attempts, leases/heartbeat/hard deadlines, retries, fenced commits,

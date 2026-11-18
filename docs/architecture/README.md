@@ -178,7 +178,7 @@ Run input: version (positive integer), input (JSON object). POST run returns 202
 Errors: code, message, details, request_id. Invalid input 422, unauthenticated 401, cross-project 404, insufficient role within visible project 403.
 Auth MVP: local bootstrap-user command, no public registration, Argon2 passwords; JWT access tokens expire in 30 minutes. OWNER manages membership/workflows/runs; DEVELOPER publishes and runs; VIEWER reads. Owner membership maintained atomically.
 Message v1: schema_version, event_id, run_id, task_run_id, dispatch_generation, traceparent (optional). Task data stays in DB; consumer checks schema and current generation.
-Health, Auth, Projects/membership and Workflow/draft/version routes are implemented; run/worker execution remains planned. See [workflow API](../development/workflows.md).
+Health, Auth, Projects/membership, Workflow/draft/version and Run/Task persistence routes are implemented. Run execution remains planned. See [workflow API](../development/workflows.md) and [run API](../development/runs.md).
 Auth now includes rotating HttpOnly refresh cookies and server-side session revocation per the accepted
 2026-11-16 plan. See [auth contracts and usage](../development/auth.md).
 

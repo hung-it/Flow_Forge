@@ -32,10 +32,12 @@ def main() -> None:
         for _ in range(2)
     ]
 
-    def call(client, method, path, body=None, token=None):
+    def call(client, method, path, body=None, token=None, key=None):
         headers = {"Content-Type": "application/json", "X-FlowForge-CSRF": "1"}
         if token:
             headers["Authorization"] = "Bearer " + token
+        if key is not None:
+            headers["Idempotency-Key"] = key
         request = urllib.request.Request(
             "http://localhost:8000/api/v1" + path,
             data=json.dumps(body).encode() if body is not None else None,
@@ -96,15 +98,32 @@ def main() -> None:
         == 200
     )
     assert call(owner, "GET", workflow_path + "/versions/1", token=token)[1] == version
+    runs_path = workflow_path + "/runs"
+    key = "smoke-" + suffix
+    assert call(owner, "POST", runs_path, {"version": 1, "input": {}}, token, key)[0] == 422
+    run_body = {"version": 1, "input": {"document": {"title": "Smoke", "content": "Example"}}}
+    status, created = call(owner, "POST", runs_path, run_body, token, key)
+    assert status == 202 and created["status"] == "PENDING"
+    assert call(owner, "POST", runs_path, run_body, token, key) == (202, created)
+    conflict = {**run_body, "version": 2}
+    assert call(owner, "POST", runs_path, conflict, token, key)[0] == 409
+    assert call(member, "POST", runs_path, run_body, member_token, key)[0] == 403
+    run_path = "/runs/" + created["run_id"]
+    status, metadata = call(member, "GET", run_path, token=member_token)
+    assert status == 200 and metadata["workflow_version_id"] == version["id"]
+    status, tasks = call(member, "GET", run_path + "/tasks", token=member_token)
+    assert status == 200 and len(tasks) == 5
+    assert all(task["status"] == "PENDING" and task["attempt_count"] == 0 for task in tasks)
+    nodes = {task["task_id"]: task["node_key"] for task in tasks}
+    edges = {(nodes[p], task["node_key"]) for task in tasks for p in task["predecessor_task_ids"]}
+    assert edges == {tuple(edge) for edge in dag["edges"]}
     status, payload = call(owner, "POST", "/auth/refresh", {})
     assert status == 200
     new_token = payload["access_token"]
     assert call(owner, "POST", "/auth/logout", {})[0] == 204
     assert call(owner, "GET", "/auth/me", token=new_token)[0] == 401
     assert call(member, "GET", "/auth/me", token=member_token)[0] == 200
-    print(
-        "PASS: HTTP auth/project RBAC and workflow draft/publication immutability"
-    )
+    print("PASS: HTTP auth/project RBAC, workflow publication, and run graph/idempotency")
 
 
 if __name__ == "__main__":

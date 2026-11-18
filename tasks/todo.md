@@ -28,7 +28,8 @@
 - [x] Auth/projects/contracts coverage gates >=80% trên combined PostgreSQL suite
 - [x] Workflow/draft API, DAG validation, handler contracts, immutable versions (local verified)
 - [x] Hai pipeline GitLab workflow xanh tại SHA 7acd91f, gồm smoke: 3077760956 và 3077766257 (83 tests/lần)
-- [ ] Run persistence, idempotency, concurrent requests
+- [x] Run/Task persistence, Idempotency-Key và 100 request đồng thời trên PostgreSQL local
+- [ ] Run/Task full Compose smoke và hai pipeline GitLab cùng SHA
 - [ ] Scheduler/outbox, durable messaging
 - [ ] Worker execution, lease/fencing
 - [ ] Retry, recovery, cancellation, failure injection

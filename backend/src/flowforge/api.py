@@ -23,6 +23,7 @@ from flowforge.errors import ApiError
 from flowforge.observability import configure_logging
 from flowforge.persistence import check_database
 from flowforge.projects.routes import router as projects_router
+from flowforge.runs.routes import router as runs_router
 from flowforge.workflows.routes import router as workflows_router
 
 
@@ -42,7 +43,13 @@ class AuthBodyLimit:
         if not auth and not workflow:
             await self.app(scope, receive, send)
             return
-        cap = 8192 if auth else 256 * 1024
+        parts = path.rstrip("/").split("/")
+        creating_run = (
+            workflow
+            and scope["method"] == "POST"
+            and (len(parts) == 6 and parts[3] == "workflows" and parts[5] == "runs")
+        )
+        cap = 8 * 1024 if auth else (64 if creating_run else 256) * 1024
 
         def invalid_constant(value: str) -> None:
             raise ValueError("Non-finite JSON")
@@ -71,8 +78,8 @@ class AuthBodyLimit:
             message = await receive()
             if message["type"] == "http.disconnect":
                 return
-            body.extend(message.get("body", b""))
-            if len(body) > cap:
+            chunk = message.get("body", b"")
+            if len(body) + len(chunk) > cap:
                 await JSONResponse(
                     dict(
                         code="PAYLOAD_TOO_LARGE",
@@ -83,6 +90,7 @@ class AuthBodyLimit:
                     status_code=413,
                 )(scope, receive, send)
                 return
+            body.extend(chunk)
             if not message.get("more_body", False):
                 break
         if workflow and scope["method"] in {"POST", "PUT", "PATCH"}:
@@ -146,6 +154,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(projects_router)
     app.include_router(workflows_router)
+    app.include_router(runs_router)
 
     @app.exception_handler(ApiError)
     async def business_error(request: Request, error: ApiError) -> JSONResponse:

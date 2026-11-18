@@ -36,7 +36,7 @@ All payload schemas are strict and reject extra fields. Binding names must match
 - aggregate: Summary -> Summary.
 - generate_report: `{summary: Summary}` -> `{summary: Summary, report_text: string}`.
 
-Execution, run persistence, runtime pointer evaluation, worker handlers, UI, retries and cancellation are not implemented by this API milestone.
+The [Run API](runs.md) persists runs from published versions and validates run-input pointers. Worker handlers, UI, retries and cancellation are later milestones.
 
 ## Verification
 

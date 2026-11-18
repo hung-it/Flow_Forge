@@ -8,7 +8,7 @@ from pathlib import Path
 def main() -> None:
     report = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     failed = False
-    for domain in ("auth/", "projects/", "contracts.py", "workflows/"):
+    for domain in ("auth/", "projects/", "contracts.py", "workflows/", "runs/"):
         summaries = [
             item["summary"]
             for name, item in report["files"].items()

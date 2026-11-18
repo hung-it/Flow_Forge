@@ -1,4 +1,4 @@
-"""Preserve identity/session rows when downgrading/reapplying the workflow migration.
+"""Preserve existing rows across workflow and run migration round trips.
 
 Only run in the disposable smoke stack, after stopping API/background writers.
 """
@@ -24,7 +24,45 @@ async def counts() -> dict[str, int]:
         await engine.dispose()
 
 
+async def snapshots() -> dict[str, list[str]]:
+    engine = create_async_engine(Settings().database_url)
+    tables = (
+        "users",
+        "projects",
+        "project_members",
+        "auth_sessions",
+        "refresh_tokens",
+        "login_counters",
+        "workflow_definitions",
+        "workflow_drafts",
+        "workflow_versions",
+    )
+    try:
+        async with engine.connect() as conn:
+            return {
+                table: list(
+                    (
+                        await conn.execute(
+                            text(f"SELECT row_to_json(t)::text FROM {table} t ORDER BY 1")
+                        )
+                    ).scalars()
+                )
+                for table in tables
+            }
+    finally:
+        await engine.dispose()
+
+
 def main() -> None:
+    saved = asyncio.run(snapshots())
+    assert all(
+        saved[table] for table in ("users", "projects", "workflow_drafts", "workflow_versions")
+    )
+    subprocess.run(["alembic", "downgrade", "0004_workflows"], check=True)
+    assert asyncio.run(snapshots()) == saved
+    subprocess.run(["alembic", "upgrade", "head"], check=True)
+    assert asyncio.run(snapshots()) == saved
+    print("PASS: run migration round trip preserves identity/project/draft/version rows")
     before = asyncio.run(counts())
     assert before["users"] > 0 and before["auth_sessions"] > 0
     subprocess.run(["alembic", "downgrade", "0003_auth_sessions"], check=True)
