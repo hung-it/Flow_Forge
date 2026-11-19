@@ -1,0 +1,32 @@
+name: Sync to GitLab
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: gitlab-sync-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Push current ref
+        env:
+          GITLAB_SSH_URL: ${{ vars.GITLAB_SSH_URL }}
+          GITLAB_DEPLOY_KEY: ${{ secrets.GITLAB_DEPLOY_KEY }}
+          GITLAB_KNOWN_HOSTS: ${{ secrets.GITLAB_KNOWN_HOSTS }}
+        run: |
+          test -n "$GITLAB_SSH_URL"
+          test -n "$GITLAB_DEPLOY_KEY"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$GITLAB_DEPLOY_KEY" > ~/.ssh/gitlab_key
+          printf '%s\n' "$GITLAB_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/gitlab_key
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/gitlab_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          git push "$GITLAB_SSH_URL" "HEAD:$GITHUB_REF"
