@@ -6,10 +6,12 @@ from contextlib import suppress
 import aio_pika
 from aio_pika.abc import AbstractIncomingMessage
 from aio_pika.exceptions import AMQPException
+from opentelemetry.trace import SpanKind, StatusCode
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from flowforge import observability as obs
 from flowforge.contracts import DispatchMessage
 from flowforge.outbox.broker import TASKS, declare_topology
 from flowforge.persistence import check_database
@@ -118,38 +120,52 @@ async def handle(
     except ValidationError:
         await message.reject(requeue=False)
         return
-    claim = await claim_task(engine, event, worker)
-    if claim is Disposition.REJECT:
-        await message.reject(requeue=False)
-        return
-    if claim is Disposition.ACK:
-        await message.ack()
-        return
-    if claim is Disposition.DEFER:
-        raise Reconnect("Delivery belongs to an expired attempt")
-    progress()
-    retryable = False
-    result, code = None, None
-    try:
-        result = await owned_work(engine, claim, stop, progress, handler)
-    except InvalidBinding:
-        code = "INPUT_BINDING_INVALID"
-    except InvalidOutput:
-        code = "OUTPUT_INVALID"
-    except HandlerTimeout:
-        code, retryable = "TASK_TIMEOUT", True
-    except HandlerFailure:
-        code, retryable = "HANDLER_FAILED", True
-    if not await finish(engine, claim, result, code, retryable):
-        raise Reconnect("Worker no longer owns the attempt")
-    await message.ack()
-    logger.info(
-        "worker committed and acked run=%s task=%s attempt=%s error=%s",
-        event.run_id,
-        event.task_run_id,
-        claim.attempt,
-        code,
-    )
+    header = (getattr(message, "headers", None) or {}).get("traceparent")
+    parent = header if obs.trace_parent(header) is not None else event.traceparent
+    with obs.span("worker.delivery", parent=parent, root=True, kind=SpanKind.CONSUMER, attributes={
+        "flowforge.run.id": str(event.run_id), "flowforge.task.id": str(event.task_run_id),
+        "flowforge.event.id": str(event.event_id), "flowforge.dispatch.generation":
+        event.dispatch_generation, "flowforge.worker.id": worker,
+    }) as delivery:
+        with obs.span("worker.claim"):
+            claim = await claim_task(engine, event, worker)
+        if claim is Disposition.REJECT:
+            await message.reject(requeue=False)
+            delivery.set_attribute("flowforge.outcome", "rejected")
+            return
+        if claim is Disposition.ACK:
+            await message.ack()
+            delivery.set_attribute("flowforge.outcome", "duplicate_or_stale")
+            return
+        if claim is Disposition.DEFER:
+            raise Reconnect("Delivery belongs to an expired attempt")
+        delivery.set_attribute("flowforge.attempt", claim.attempt)
+        delivery.set_attribute("flowforge.handler", claim.spec.handler)
+        progress()
+        retryable = False
+        result, code = None, None
+        try:
+            with obs.span("worker.execute"):
+                result = await owned_work(engine, claim, stop, progress, handler)
+        except InvalidBinding:
+            code = "INPUT_BINDING_INVALID"
+        except InvalidOutput:
+            code = "OUTPUT_INVALID"
+        except HandlerTimeout:
+            code, retryable = "TASK_TIMEOUT", True
+        except HandlerFailure:
+            code, retryable = "HANDLER_FAILED", True
+        if code:
+            delivery.set_attribute("error.type", code)
+            delivery.set_status(StatusCode.ERROR)
+        with obs.span("worker.commit"):
+            if not await finish(engine, claim, result, code, retryable):
+                raise Reconnect("Worker no longer owns the attempt")
+        with obs.span("worker.ack"):
+            await message.ack()
+        obs.log_event(logger, "worker.committed_and_acked", run_id=str(event.run_id),
+                      task_id=str(event.task_run_id), attempt=claim.attempt, error_code=code,
+                      generation=event.dispatch_generation, worker_id=worker)
 
 
 async def consume(

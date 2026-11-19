@@ -1,12 +1,15 @@
 import json
+import logging
 from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
+from opentelemetry.trace import get_current_span
 from pydantic import JsonValue
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from flowforge import observability as obs
 from flowforge.auth.service import Principal
 from flowforge.contracts import WorkflowSpec
 from flowforge.errors import ApiError
@@ -14,6 +17,8 @@ from flowforge.projects.service import visible
 from flowforge.workflows.service import EDITORS, workflow
 
 from .input import fingerprint, resolve_pointer
+
+logger = logging.getLogger(__name__)
 
 
 async def create(
@@ -64,9 +69,9 @@ async def create(
                 await conn.execute(
                     text("""INSERT INTO workflow_runs
                         (id, project_id, workflow_id, workflow_version_id, created_by,
-                         input_json, input_hash, idempotency_key)
+                         input_json, input_hash, idempotency_key, traceparent)
                         VALUES (:id,:project,:workflow,:version,:actor,CAST(:input AS jsonb),
-                                :hash,:key)
+                                :hash,:key,:traceparent)
                         ON CONFLICT (project_id,idempotency_key)
                         WHERE idempotency_key IS NOT NULL DO NOTHING
                         RETURNING id AS run_id, status"""),
@@ -79,6 +84,7 @@ async def create(
                         "input": json.dumps(value, ensure_ascii=False, allow_nan=False),
                         "hash": digest,
                         "key": key,
+                        "traceparent": obs.trace_header(),
                     },
                 )
             )
@@ -118,7 +124,10 @@ async def create(
                     for before, after in spec.edges
                 ],
             )
-        return dict(created)
+    if metrics := obs.metrics:
+        metrics.runs.labels("created").inc()
+    obs.log_event(logger, "run.created", run_id=str(run_id))
+    return dict(created)
 
 
 RUN_METADATA = """SELECT r.id AS run_id,r.project_id,r.workflow_id,r.workflow_version_id,
@@ -185,15 +194,16 @@ async def detail(engine: AsyncEngine, actor: Principal, run_id: UUID) -> dict[st
 async def cancel(engine: AsyncEngine, actor: Principal, run_id: UUID) -> dict[str, Any]:
     params = {"id": run_id}
     async with engine.begin() as conn:
-        project = await conn.scalar(
-            text("SELECT project_id FROM workflow_runs WHERE id=:id"), params
-        )
-        if project is None:
+        row = (await conn.execute(
+            text("SELECT project_id,traceparent FROM workflow_runs WHERE id=:id"), params
+        )).one_or_none()
+        if row is None:
             raise ApiError(404, "NOT_FOUND", "Run not found")
-        membership = await visible(conn, actor, project, write=True, roles=EDITORS)
+        membership = await visible(conn, actor, row.project_id, write=True, roles=EDITORS)
         run = await _visible_run(conn, actor, run_id, lock=True)
         if membership["role"] == "DEVELOPER" and run["created_by"] != actor.user_id:
             raise ApiError(403, "FORBIDDEN", "Only the project owner or run creator can cancel")
+        obs.link_run(get_current_span(), row.traceparent)
         if run["status"] not in ("PENDING", "RUNNING"):
             return run
 
@@ -202,11 +212,12 @@ async def cancel(engine: AsyncEngine, actor: Principal, run_id: UUID) -> dict[st
             text("SELECT id FROM task_runs WHERE run_id=:id ORDER BY id FOR UPDATE"), params
         )
         finished = await conn.scalar(text("SELECT clock_timestamp()"))
-        await conn.execute(
+        attempts = (await conn.execute(
             text("""UPDATE task_attempts a SET status='CANCELED',finished_at=:finished
-            FROM task_runs t WHERE t.id=a.task_run_id AND t.run_id=:id AND a.status='RUNNING'"""),
+            FROM task_runs t WHERE t.id=a.task_run_id AND t.run_id=:id AND a.status='RUNNING'
+            RETURNING EXTRACT(EPOCH FROM a.finished_at-a.started_at)"""),
             {**params, "finished": finished},
-        )
+        )).scalars().all()
         await conn.execute(
             text("""UPDATE task_runs SET status='CANCELED',lease_token=NULL,lease_until=NULL,
                 hard_deadline=NULL,next_run_at=NULL
@@ -223,7 +234,12 @@ async def cancel(engine: AsyncEngine, actor: Principal, run_id: UUID) -> dict[st
             text("UPDATE workflow_runs SET status='CANCELED',finished_at=:finished WHERE id=:id"),
             {**params, "finished": finished},
         )
-        return {**run, "status": "CANCELED", "finished_at": finished}
+    if metrics := obs.metrics:
+        metrics.runs.labels("canceled").inc()
+        for duration in attempts:
+            metrics.attempt("canceled", float(duration))
+    obs.log_event(logger, "run.canceled", run_id=str(run_id))
+    return {**run, "status": "CANCELED", "finished_at": finished}
 
 
 async def tasks(

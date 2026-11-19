@@ -1,0 +1,200 @@
+{
+  "uid": "flowforge-operations",
+  "title": "FlowForge Operations",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "API requests · rate and errors",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "flowforge-prometheus" },
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(flowforge_http_requests_total[1m]))",
+          "legendFormat": "Requests"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(flowforge_http_requests_total{status_class=\"5xx\"}[1m]))",
+          "legendFormat": "5xx"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "API latency",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "flowforge-prometheus" },
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(flowforge_http_request_duration_seconds_bucket[1m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(flowforge_http_request_duration_seconds_bucket[1m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(flowforge_http_request_duration_seconds_bucket[1m])))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Workflow runs",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "flowforge-prometheus" },
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (rate(flowforge_workflow_runs_total[1m]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Task attempt latency",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "flowforge-prometheus" },
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(flowforge_task_attempt_duration_seconds_bucket[1m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(flowforge_task_attempt_duration_seconds_bucket[1m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(flowforge_task_attempt_duration_seconds_bucket[1m])))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Attempt outcomes and retry rate",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "flowforge-prometheus" },
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (rate(flowforge_task_attempts_total[1m]))",
+          "legendFormat": "Attempt {{outcome}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (reason) (rate(flowforge_task_retries_total[1m]))",
+          "legendFormat": "Retry {{reason}}"
+        },
+        {
+          "refId": "C",
+          "expr": "sum by (reason) (rate(flowforge_lease_expirations_total[1m]))",
+          "legendFormat": "Expired {{reason}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Pending outbox events",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "flowforge-prometheus" },
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(flowforge_outbox_pending_events and (time() - flowforge_outbox_snapshot_timestamp_seconds < 15))",
+          "legendFormat": "Pending and claimed"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Oldest unpublished event",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "flowforge-prometheus" },
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(flowforge_outbox_oldest_seconds and (time() - flowforge_outbox_snapshot_timestamp_seconds < 15))",
+          "legendFormat": "Age"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "RabbitMQ backlog and consumers",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "flowforge-prometheus" },
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (queue) (rabbitmq_detailed_queue_messages_ready)",
+          "legendFormat": "Ready · {{queue}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (queue) (rabbitmq_detailed_queue_messages_unacked)",
+          "legendFormat": "Unacked · {{queue}}"
+        },
+        {
+          "refId": "C",
+          "expr": "sum(rabbitmq_detailed_queue_consumers{queue=\"flowforge.tasks.v1\"})",
+          "legendFormat": "Task consumers"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Dispatch and publisher throughput",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "flowforge-prometheus" },
+      "gridPos": { "x": 0, "y": 32, "w": 24, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(flowforge_scheduler_dispatches_total[1m]))",
+          "legendFormat": "New dispatch"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(flowforge_scheduler_redrives_total[1m]))",
+          "legendFormat": "Redrive"
+        },
+        {
+          "refId": "C",
+          "expr": "sum by (outcome) (rate(flowforge_outbox_publish_total[1m]))",
+          "legendFormat": "Publish {{outcome}}"
+        }
+      ]
+    }
+  ]
+}

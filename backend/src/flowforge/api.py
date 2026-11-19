@@ -4,11 +4,13 @@ import logging
 import math
 import uuid
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
+from time import perf_counter
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from opentelemetry.trace import INVALID_SPAN, SpanKind, StatusCode
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import create_async_engine
 from starlette.exceptions import HTTPException
@@ -16,11 +18,11 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from flowforge import observability as obs
 from flowforge.auth.routes import router as auth_router
 from flowforge.auth.security import COOKIE_NAME, COOKIE_PATH, AuthSettings
 from flowforge.config import Settings
 from flowforge.errors import ApiError
-from flowforge.observability import configure_logging
 from flowforge.persistence import check_database
 from flowforge.projects.routes import router as projects_router
 from flowforge.runs.routes import router as runs_router
@@ -133,7 +135,6 @@ class AuthBodyLimit:
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        configure_logging()
         settings = Settings()
         app.state.auth = AuthSettings()
         app.state.engine = create_async_engine(
@@ -145,7 +146,8 @@ def create_app() -> FastAPI:
             connect_args={"timeout": 5, "command_timeout": 10},
         )
         try:
-            yield
+            async with obs.telemetry("api", settings):
+                yield
         finally:
             await app.state.engine.dispose()
 
@@ -226,18 +228,36 @@ def create_app() -> FastAPI:
     async def request_context(request: Request, call_next: RequestResponseEndpoint) -> Response:
         request_id = str(uuid.uuid4())
         request.state.request_id = request_id
-        response = await call_next(request)
-        response.headers["X-Request-ID"] = request_id
-        if request.url.path.startswith("/api/v1/auth/"):
-            response.headers["Cache-Control"] = "no-store"
-        logging.getLogger("api").info(
-            "request_id=%s method=%s path=%s status=%s",
-            request_id,
-            request.method,
-            request.url.path,
-            response.status_code,
-        )
-        return response
+        method = obs.http_method(request.method)
+        token = obs.request_ref.set(request_id)
+        started, status = perf_counter(), 500
+        probe = request.url.path in {"/health/live", "/health/ready"}
+        operation = (nullcontext(INVALID_SPAN) if probe else
+                     obs.span("http.request", root=True, kind=SpanKind.SERVER))
+        try:
+            with operation as current:
+                try:
+                    response = await call_next(request)
+                    status = response.status_code
+                    response.headers["X-Request-ID"] = request_id
+                    if request.url.path.startswith("/api/v1/auth/"):
+                        response.headers["Cache-Control"] = "no-store"
+                    return response
+                finally:
+                    route = getattr(request.scope.get("route"), "path", "unmatched")
+                    current.update_name(f"{method} {route}")
+                    current.set_attributes({
+                        "http.request.method": method, "http.route": route,
+                        "http.response.status_code": status, "flowforge.request.id": request_id,
+                    })
+                    if status >= 500:
+                        current.set_status(StatusCode.ERROR)
+                    if not probe:
+                        obs.record_http(method, route, status, perf_counter() - started)
+                    obs.log_event(logging.getLogger("api"), "http.request",
+                                  method=method, route=route, status=status)
+        finally:
+            obs.request_ref.reset(token)
 
     @app.get("/health/live")
     async def live() -> dict[str, str]:

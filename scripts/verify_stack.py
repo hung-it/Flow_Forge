@@ -29,10 +29,16 @@ def main():
             key, value = line.split("=", 1)
             env[key] = value
     env["FLOWFORGE_JWT_SECRET"] = secrets.token_urlsafe(48)
+    env["FLOWFORGE_GRAFANA_ADMIN_PASSWORD"] = secrets.token_urlsafe(32)
+    env["GRAFANA_PORT"] = free_port()
+    env["JAEGER_PORT"] = free_port()
     base = ["docker", "compose", "--env-file", ".env.example", "-p", project]
+    overlay = ["-f", "compose.yaml", "-f", "compose.observability.yaml",
+               "--profile", "observability"]
 
-    def compose(*args, expected=0, input_text=None):
-        result = subprocess.run(base + list(args), check=False, cwd=ROOT, env=env,
+    def compose(*args, expected=0, input_text=None, telemetry=False):
+        result = subprocess.run(base + (overlay if telemetry else []) + list(args),
+                                check=False, cwd=ROOT, env=env,
                                 input=input_text,
                                 encoding="utf-8", errors="replace",
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -77,6 +83,33 @@ def main():
             return True
         except RuntimeError:
             return False
+
+    def observability():
+        def run(*args):
+            return compose(*args, telemetry=True)
+
+        def phase(name):
+            output = run("exec", "-T", "-e", "FLOWFORGE_GRAFANA_ADMIN_PASSWORD", "api",
+                         "python", "integration/telemetry_acceptance.py", name)
+            with (reports / "telemetry-smoke.log").open("a", encoding="utf-8") as log:
+                log.write(output)
+            print(output, flush=True)
+
+        compose("stop", "publisher", "worker")
+        run("up", "-d", "--no-build", "--wait",
+            "api", "scheduler", "rabbitmq", "prometheus", "jaeger", "grafana")
+        phase("queued")
+        run("up", "-d", "--no-build", "--wait", "publisher")
+        phase("broker")
+        run("up", "-d", "--no-build", "--wait", "--scale", "worker=2", "worker")
+        phase("completed")
+        run("stop", "prometheus", "jaeger")
+        phase("offline")
+        run("up", "-d", "--no-build", "--wait", "prometheus", "jaeger")
+        phase("restored")
+        logs = run("logs", "--no-color", "api", "scheduler", "publisher", "worker")
+        assert "flowforge-observability-smoke-private-input" not in logs
+        assert '"event": "run.created"' in logs and '"trace_id":' in logs
 
     reports.mkdir(parents=True)
     print(f"Disposable project: {project}", flush=True)
@@ -175,16 +208,20 @@ def main():
         compose("up", "-d", "--wait", "--wait-timeout", "120")
         assert status("/health/ready") == 200
         print("Migration base/old/dirty-data/head/repeat upgrade passed", flush=True)
+        observability()
     finally:
         try:
-            (reports / "compose.log").write_text(compose("logs", "--no-color"), encoding="utf-8")
+            (reports / "compose.log").write_text(
+                compose("logs", "--no-color", telemetry=True), encoding="utf-8",
+            )
         finally:
             # Cleanup must still be attempted if collecting logs fails.
             # The name is generated above, never accepted from env or user input.
-            compose("down", "--volumes", "--remove-orphans")
+            compose("down", "--volumes", "--remove-orphans", telemetry=True)
 
     (reports / "result.txt").write_text(
-        "PASS: build, integration, browser, proxy, outages, SIGTERM, migrations, cleanup\n",
+        "PASS: build, integration, browser, proxy, outages, SIGTERM, "
+        "migrations, telemetry, cleanup\n",
         encoding="utf-8",
     )
     print(f"PASS. Evidence: {reports}", flush=True)

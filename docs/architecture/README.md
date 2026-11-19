@@ -26,13 +26,17 @@ flowchart LR
   Publisher --> MQ[RabbitMQ]
   MQ --> Workers
   Workers --> DB
-  API -.-> O[Logs / metrics / traces]
+  API -.-> O[Telemetry tùy chọn]
   Scheduler -.-> O
   Publisher -.-> O
   Workers -.-> O
+  MQ -.-> P[Prometheus]
+  O -.-> P
+  P --> G[Grafana]
+  O -.-> J[Jaeger]
 ```
 
-Compose là một host local, DB/broker chỉ trong network nội bộ, named volumes riêng. Migration là one-shot trước các process. Observability hiện có JSON logs; metrics/traces bổ sung tuần 9.
+Compose chạy trên một host local. PostgreSQL và RabbitMQ dùng network nội bộ và named volumes riêng. Migration chạy một lần trước các process. Profile observability thêm Prometheus, Grafana và Jaeger. Các role ghi JSON logs và nối trace qua context lưu cùng run, outbox và AMQP header. [Hướng dẫn observability](../development/observability.md)
 Một image backend, entrypoint API bằng uvicorn, các role còn lại qua `python -m flowforge.process ROLE`. Scheduler mở task theo DAG, Publisher đẩy event từ outbox, Worker nhận message và chạy handler.
 
 ## 3 Module boundaries

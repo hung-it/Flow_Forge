@@ -173,3 +173,11 @@ After upgrading TypeScript ESLint to `8.73.0` and the withdrawal of the picomatc
 Chrome passed both dashboard smoke phases against Compose. The first phase covers owner membership management, serialized refresh across two tabs, concurrent draft recovery, an immutable published DAG, a lost create-run response with replay of the same idempotency key, a real Worker run, attempt history, viewer access, and keyboard and mobile navigation. The second phase pauses the execution services to check canceling a pending run and reading its empty attempt history.
 
 The full Compose runner and GitLab `smoke` job include both browser phases. The run artifacts include `dashboard-smoke.log`, the PostgreSQL integration results, and coverage for each domain. [Dashboard pipelines](https://gitlab.com/hung-it/flow_forge/-/pipelines?ref=feat%2Fdashboard).
+
+## Metrics and distributed traces
+
+`check.ps1` passed with 60 unit tests, lint, type checks, frontend build, dependency audits and nine diagrams. Two focused PostgreSQL tests passed for persisted trace context, idempotent replay, cancellation links, rollback, retry and lease recovery.
+
+The local observability smoke checked Grafana provisioning, Prometheus outbox and RabbitMQ backlog, two Worker targets, cancellation and the parent chain from API to Worker in Jaeger. A new workflow completed during a Prometheus and Jaeger outage. Trace export worked again after both services returned.
+
+The full Compose runner and GitLab `smoke` job include the browser flows, migration preservation and observability acceptance. Signal verification is recorded in `telemetry-smoke.log`. [Observability pipelines](https://gitlab.com/hung-it/flow_forge/-/pipelines?ref=feat%2Fobservability).

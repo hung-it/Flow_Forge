@@ -1,9 +1,12 @@
+import asyncio
 import logging
 from uuid import uuid4
 
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from flowforge import observability as obs
 from flowforge.contracts import DispatchMessage
 
 logger = logging.getLogger(__name__)
@@ -22,17 +25,18 @@ async def reconcile(engine: AsyncEngine) -> int:
     """Reconcile one actionable run under its row lock."""
     dispatched: list[DispatchMessage] = []
     async with engine.begin() as conn:
-        run = await conn.scalar(
-            text(f"""SELECT r.id FROM workflow_runs r
+        row = (await conn.execute(
+            text(f"""SELECT r.id,r.traceparent FROM workflow_runs r
             WHERE r.status IN {ACTIVE} AND (
               EXISTS(SELECT 1 FROM task_runs t WHERE t.run_id=r.id AND {ACTIONABLE})
               OR (r.status='RUNNING' AND NOT EXISTS(SELECT 1 FROM task_runs t
                             WHERE t.run_id=r.id AND t.status NOT IN {TERMINAL})))
             ORDER BY r.created_at,r.id LIMIT 1 FOR UPDATE OF r SKIP LOCKED""")
-        )
-        if run is None:
+        )).one_or_none()
+        if row is None:
             return 0
 
+        run, parent = row.id, row.traceparent
         params = {"run": run, "limit": BATCH}
         candidates = (
             (
@@ -64,24 +68,30 @@ async def reconcile(engine: AsyncEngine) -> int:
                     ident,
                 )
             ).scalar_one()
-            event = DispatchMessage(
-                schema_version=1,
-                event_id=uuid4(),
-                run_id=run,
-                task_run_id=task["id"],
-                dispatch_generation=generation,
-            )
-            await conn.execute(
-                text("""INSERT INTO outbox_events
-                (id,task_run_id,dispatch_generation,event_type,payload)
-                VALUES(:id,:task,:generation,'task.execute',CAST(:payload AS jsonb))"""),
-                {
-                    "id": event.event_id,
-                    "task": event.task_run_id,
-                    "generation": generation,
-                    "payload": event.model_dump_json(exclude_none=True),
-                },
-            )
+            event_id = uuid4()
+            with obs.span("scheduler.dispatch", parent=parent, root=True, attributes={
+                "flowforge.run.id": str(run), "flowforge.task.id": str(task["id"]),
+                "flowforge.event.id": str(event_id), "flowforge.dispatch.generation": generation,
+            }):
+                event = DispatchMessage(
+                    schema_version=1,
+                    event_id=event_id,
+                    run_id=run,
+                    task_run_id=task["id"],
+                    dispatch_generation=generation,
+                    traceparent=obs.trace_header(),
+                )
+                await conn.execute(
+                    text("""INSERT INTO outbox_events
+                    (id,task_run_id,dispatch_generation,event_type,payload)
+                    VALUES(:id,:task,:generation,'task.execute',CAST(:payload AS jsonb))"""),
+                    {
+                        "id": event.event_id,
+                        "task": event.task_run_id,
+                        "generation": generation,
+                        "payload": event.model_dump_json(exclude_none=True),
+                    },
+                )
             dispatched.append(event)
         if dispatched:
             await conn.execute(
@@ -100,16 +110,18 @@ async def reconcile(engine: AsyncEngine) -> int:
             RETURNING status"""),
             params,
         )
+    if (metrics := obs.metrics) and dispatched:
+        metrics.dispatches.inc(len(dispatched))
     for event in dispatched:
-        logger.info(
-            "dispatched run=%s task=%s event=%s generation=%s",
-            event.run_id,
-            event.task_run_id,
-            event.event_id,
-            event.dispatch_generation,
-        )
+        obs.log_event(logger, "scheduler.dispatched", parent=event.traceparent,
+                      run_id=str(event.run_id), task_id=str(event.task_run_id),
+                      event_id=str(event.event_id), generation=event.dispatch_generation)
     if completed:
-        logger.info("completed run=%s status=%s", run, completed)
+        if metrics:
+            metrics.runs.labels(completed.lower()).inc()
+        with obs.span("scheduler.complete", parent=parent, root=True,
+                      attributes={"flowforge.run.id": str(run), "flowforge.outcome": completed}):
+            obs.log_event(logger, "scheduler.completed", run_id=str(run), status=completed)
     return len(candidates) + int(completed is not None)
 
 
@@ -144,13 +156,36 @@ async def redrive(engine: AsyncEngine) -> int:
                     text(f"""UPDATE outbox_events e SET status='PENDING',
             available_at=clock_timestamp(),last_redriven_at=clock_timestamp()
             FROM task_runs t WHERE t.id=e.task_run_id AND t.id=ANY(CAST(:tasks AS uuid[]))
-            AND {DUE} RETURNING e.id"""),
+            AND {DUE} RETURNING e.id,e.payload->>'traceparent' AS traceparent"""),
                     {"tasks": list(tasks)},
                 )
             )
-            .scalars()
             .all()
         )
     for event in changed:
-        logger.info("redriven run=%s event=%s", run, event)
+        with obs.span("scheduler.redrive", parent=event.traceparent, root=True, attributes={
+            "flowforge.run.id": str(run), "flowforge.event.id": str(event.id),
+        }):
+            obs.log_event(logger, "scheduler.redriven", run_id=str(run), event_id=str(event.id))
+    if (metrics := obs.metrics) and changed:
+        metrics.redrives.inc(len(changed))
     return len(changed)
+
+
+async def sample_outbox(engine: AsyncEngine) -> None:
+    metrics = obs.metrics
+    if metrics is None:
+        return
+    try:
+        async with asyncio.timeout(1), engine.connect() as conn:
+            counts, age, sampled_at = (await conn.execute(text("""
+                SELECT count(*),
+                       COALESCE(EXTRACT(EPOCH FROM statement_timestamp()-min(created_at)),0),
+                       EXTRACT(EPOCH FROM statement_timestamp())
+                FROM outbox_events WHERE status IN ('PENDING','CLAIMED')
+            """))).one()
+    except (SQLAlchemyError, TimeoutError, OSError):
+        return
+    metrics.outbox_pending.set(counts)
+    metrics.outbox_age.set(max(0, float(age)))
+    metrics.outbox_freshness.set(float(sampled_at))

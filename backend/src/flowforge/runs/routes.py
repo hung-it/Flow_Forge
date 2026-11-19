@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Header, Request, Response
 from pydantic import BaseModel, Field, JsonValue
 
+from flowforge import observability as obs
 from flowforge.auth.routes import CurrentUser
 from flowforge.contracts import Contract
 from flowforge.errors import ApiError
@@ -96,9 +97,11 @@ async def create(
         ):
             raise ApiError(422, "INVALID_IDEMPOTENCY_KEY", "Invalid Idempotency-Key")
         key = idempotency_key[0]
-    result = await service.create(
-        request.app.state.engine, actor, workflow_id, body.version, body.input, key
-    )
+    with obs.span("run.create") as operation:
+        result = await service.create(
+            request.app.state.engine, actor, workflow_id, body.version, body.input, key
+        )
+        operation.set_attribute("flowforge.run.id", str(result["run_id"]))
     response.headers["Location"] = f"/api/v1/runs/{result['run_id']}"
     return result
 
@@ -131,7 +134,8 @@ async def detail(run_id: UUID, request: Request, actor: CurrentUser) -> dict[str
 
 @router.post("/runs/{run_id}/cancel", response_model=RunOutput)
 async def cancel(run_id: UUID, request: Request, actor: CurrentUser) -> dict[str, Any]:
-    return await service.cancel(request.app.state.engine, actor, run_id)
+    with obs.span("run.cancel", attributes={"flowforge.run.id": str(run_id)}):
+        return await service.cancel(request.app.state.engine, actor, run_id)
 
 
 @router.get("/runs/{run_id}/tasks", response_model=list[TaskOutput])

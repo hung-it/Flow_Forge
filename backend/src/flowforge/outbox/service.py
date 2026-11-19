@@ -6,9 +6,11 @@ from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 from aio_pika.exceptions import AMQPException
+from opentelemetry.trace import SpanKind, StatusCode
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from flowforge import observability as obs
 from flowforge.contracts import DispatchMessage
 
 logger = logging.getLogger(__name__)
@@ -123,18 +125,25 @@ async def publish_next(
     event = await preflight(engine, claim)
     if event is None:
         return True
-    try:
-        confirmed = await asyncio.wait_for(send(event), timeout=5)
-    except (AMQPException, OSError, TimeoutError):
-        confirmed = False
-    recorded = await finish(engine, claim, confirmed)
-    logger.info(
-        "publish run=%s task=%s event=%s generation=%s confirmed=%s recorded=%s",
-        event.run_id,
-        event.task_run_id,
-        event.event_id,
-        event.dispatch_generation,
-        confirmed,
-        recorded,
-    )
+    with obs.span("publisher.publish", parent=event.traceparent, root=True,
+                  kind=SpanKind.PRODUCER, attributes={
+                      "flowforge.run.id": str(event.run_id),
+                      "flowforge.task.id": str(event.task_run_id),
+                      "flowforge.event.id": str(event.event_id),
+                      "flowforge.dispatch.generation": event.dispatch_generation,
+                  }) as operation:
+        try:
+            confirmed = await asyncio.wait_for(send(event), timeout=5)
+        except (AMQPException, OSError, TimeoutError):
+            confirmed = False
+        recorded = await finish(engine, claim, confirmed)
+        outcome = ("confirmed" if confirmed else "retry") if recorded else "stale_claim"
+        if metrics := obs.metrics:
+            metrics.publishes.labels(outcome).inc()
+        operation.set_attribute("flowforge.outcome", outcome)
+        if not confirmed or not recorded:
+            operation.set_status(StatusCode.ERROR)
+        obs.log_event(logger, "publisher.published", run_id=str(event.run_id),
+                      task_id=str(event.task_run_id), event_id=str(event.event_id),
+                      generation=event.dispatch_generation, outcome=outcome)
     return True

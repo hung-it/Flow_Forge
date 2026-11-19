@@ -46,21 +46,22 @@ async def probe(role: str) -> bool:
 
 
 async def run(role: str) -> None:
-    from flowforge.observability import configure_logging
+    from flowforge.config import Settings
+    from flowforge.observability import telemetry
 
-    configure_logging()
     logger = logging.getLogger(role)
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for name in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(name, stop.set)
-    logger.info("process starting")
     health_path(role).unlink(missing_ok=True)
     try:
-        if role == "worker":
-            await run_worker(stop)
-        else:
-            await run_dispatch_role(role, stop)
+        async with telemetry(role, Settings()):
+            logger.info("process starting")
+            if role == "worker":
+                await run_worker(stop)
+            else:
+                await run_dispatch_role(role, stop)
     finally:
         health_path(role).unlink(missing_ok=True)
     logger.info("shutdown complete")
@@ -113,7 +114,7 @@ async def run_dispatch_role(role: str, stop: asyncio.Event) -> None:
     from flowforge.outbox.broker import Broker
     from flowforge.outbox.service import publish_next
     from flowforge.persistence import check_database
-    from flowforge.scheduler.service import BATCH, reconcile, redrive
+    from flowforge.scheduler.service import BATCH, reconcile, redrive, sample_outbox
     from flowforge.worker.service import recover
 
     settings = Settings()
@@ -127,6 +128,7 @@ async def run_dispatch_role(role: str, stop: asyncio.Event) -> None:
     )
     broker = Broker(settings.rabbitmq_url) if role == "publisher" else None
     logger = logging.getLogger(role)
+    next_snapshot = 0.0
     try:
         while not stop.is_set():
             try:
@@ -153,6 +155,9 @@ async def run_dispatch_role(role: str, stop: asyncio.Event) -> None:
                 logger.warning("dispatch loop unavailable error=%s", type(error).__name__)
                 if broker is not None:
                     await broker.close()
+            if broker is None and time.monotonic() >= next_snapshot:
+                await sample_outbox(engine)
+                next_snapshot = time.monotonic() + 5
             try:
                 await asyncio.wait_for(stop.wait(), timeout=1)
             except TimeoutError:

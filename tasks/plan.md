@@ -16,6 +16,15 @@ Worker execution, lease fencing và retry đã pass full Compose smoke local và
 tại `564237e`. Bản tích hợp `main` tại `a5d1331` xanh cả bốn job [GitLab](https://gitlab.com/hung-it/flow_forge/-/pipelines/3087574383).
 Run cancellation và các drill Worker đã nghiệm thu trên `feat/run-cancellation` tại `05d7e7c`.
 Dashboard workflow/run/attempt nằm trên `feat/dashboard`, dựa trên PR cancellation đang chờ tích hợp.
+Metrics/traces nằm trên `feat/observability`, dựa trên dashboard tại `7d1f8d7`.
+
+## Nhật ký 2026-11-19 — Metrics và distributed tracing
+
+- Bật tùy chọn Prometheus, Grafana và Jaeger qua Compose. Dashboard vận hành hiển thị API latency, kết quả run, task attempt, retry và lease recovery, outbox lag và RabbitMQ backlog.
+- Migration `0008_run_trace_context` lưu W3C context cùng transaction tạo run. Scheduler nối span qua outbox, Publisher truyền context qua AMQP header và Worker ghi claim, execute, commit, ACK. Replay giữ context gốc và span hủy liên kết về run.
+- Đếm outcome sau commit. Thêm nghiệm thu trace, backlog, hai Worker, replay, cancellation và hoạt động khi hệ thống telemetry ngừng. [Hướng dẫn demo](../docs/development/observability.md) · [GitLab pipelines](https://gitlab.com/hung-it/flow_forge/-/pipelines?ref=feat%2Fobservability)
+- `check.ps1` pass 60 unit tests, lint, typecheck, build, audit và 9 sơ đồ. Hai test PostgreSQL và smoke observability riêng đã pass, gồm kiểm tra trace trước và sau khi Jaeger được khởi động lại.
+- Bước tiếp theo sau khi nghiệm thu và tích hợp là benchmark 1.000 task, ghi lại môi trường, throughput, latency và các ca recovery để chuẩn bị release.
 
 ## Nhật ký 2026-11-19 — Dashboard workflow/run/attempt
 
@@ -221,7 +230,7 @@ Nhật ký bên dưới ghi kết quả trước restart; các trạng thái run
 ## Các bước tiếp theo theo thứ tự
 
 1. Tích hợp PR cancellation trước, rồi review dashboard trên `main` sau khi hai pipeline GitLab cùng SHA xanh.
-2. Instrument API, Scheduler, Publisher và Worker với OpenTelemetry và metrics có nhãn cardinality thấp. Nghiệm thu trên luồng chạy thành công, retry và hủy.
+2. Nghiệm thu metrics/traces bằng Full Compose local và hai pipeline GitLab cùng commit. Tích hợp sau dashboard.
 3. Đo benchmark 1.000 task trên môi trường được ghi rõ. Chốt README, video demo và release theo lịch bên dưới.
 
 ## Roadmap v2
