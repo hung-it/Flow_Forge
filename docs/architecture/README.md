@@ -1,6 +1,6 @@
 # Kiến trúc FlowForge
 
-Đã triển khai Auth/Projects, workflow draft/version, Run/Task persistence, Scheduler/Outbox, Worker execution và run cancellation. Giao diện hiện có màn hình kiểm tra kết nối. Dashboard thuộc mốc sau.
+Đã triển khai Auth/Projects, workflow draft/version, Run/Task persistence, Scheduler/Outbox, Worker execution và run cancellation. Dashboard có đăng nhập, quản lý quyền truy cập project và theo dõi workflow/run/attempt.
 Nguồn chính: tài liệu trong repo và [progress plan v2](../../tasks/plan.md).
 Xem [execution contracts v1](execution-contracts.md) cho DAG, handler, transaction, broker và limits.
 
@@ -172,7 +172,7 @@ flowchart LR
 ## Contracts
 
 API prefix /api/v1; snake_case; UUID string; timestamps UTC; limit/offset default 20 max 100.
-Các route đã triển khai, gồm run cancellation, được liệt kê trong Swagger UI. Route xem attempt thuộc mốc dashboard.
+Các route đã triển khai, gồm run cancellation và lịch sử attempt theo task, được liệt kê trong Swagger UI.
 Run input: version (positive integer), input (JSON object). POST run returns 202 with run_id and status. Optional Idempotency-Key scoped to project: canonical hash includes workflow ID, explicit version and input; equal key/hash returns original run, different hash returns 409. Keys retained with run.
 Errors: code, message, details, request_id. Invalid input 422, unauthenticated 401, cross-project 404, insufficient role within visible project 403.
 Auth MVP: local bootstrap-user command, no public registration, Argon2 passwords; JWT access tokens expire in 30 minutes. OWNER manages membership/workflows/runs; DEVELOPER publishes and runs; VIEWER reads. Owner membership maintained atomically.

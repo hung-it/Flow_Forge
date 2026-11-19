@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -10,7 +11,7 @@ from flowforge.auth.service import Principal
 from flowforge.contracts import WorkflowSpec
 from flowforge.errors import ApiError
 from flowforge.projects.service import visible
-from flowforge.workflows.service import EDITORS
+from flowforge.workflows.service import EDITORS, workflow
 
 from .input import fingerprint, resolve_pointer
 
@@ -128,16 +129,31 @@ JOIN project_members m ON m.project_id=r.project_id AND m.user_id=:user_id"""
 
 
 async def list_runs(
-    engine: AsyncEngine, actor: Principal, project_id: UUID | None, limit: int, offset: int
+    engine: AsyncEngine, actor: Principal, project_id: UUID | None, limit: int, offset: int,
+    *, workflow_id: UUID | None = None, status: str | None = None,
+    created_from: datetime | None = None, created_to: datetime | None = None,
 ) -> list[dict[str, Any]]:
     async with engine.connect() as conn:
-        query = RUN_METADATA
         if project_id is not None:
             await visible(conn, actor, project_id)
-            query += " WHERE r.project_id=:project"
+        if workflow_id is not None:
+            definition = await workflow(conn, actor, workflow_id)
+            if project_id is not None and definition["project_id"] != project_id:
+                raise ApiError(404, "NOT_FOUND", "Workflow not found in project")
+        filters = (
+            ("project", "r.project_id=:project", project_id),
+            ("workflow", "r.workflow_id=:workflow", workflow_id),
+            ("status", "r.status=:status", status),
+            ("start", "r.created_at>=:start", created_from),
+            ("end", "r.created_at<:end", created_to),
+        )
+        predicates = [clause for _, clause, value in filters if value is not None]
+        where = " WHERE " + " AND ".join(predicates) if predicates else ""
+        params = {key: value for key, _, value in filters if value is not None}
         rows = await conn.execute(
-            text(query + " ORDER BY r.created_at DESC,r.id DESC LIMIT :limit OFFSET :offset"),
-            {"user_id": actor.user_id, "project": project_id, "limit": limit, "offset": offset},
+            text(RUN_METADATA + where + " ORDER BY r.created_at DESC,r.id DESC"
+                 " LIMIT :limit OFFSET :offset"),
+            {**params, "user_id": actor.user_id, "limit": limit, "offset": offset},
         )
         return [dict(row) for row in rows.mappings()]
 
@@ -225,3 +241,25 @@ async def tasks(
             {"id": run_id, "limit": limit, "offset": offset},
         )
         return [dict(row) for row in rows.mappings()]
+
+
+async def attempts(
+    engine: AsyncEngine, actor: Principal, task_id: UUID, limit: int, offset: int,
+) -> list[dict[str, Any]]:
+    async with engine.connect() as conn:
+        result = await conn.execute(
+            text("""SELECT a.* FROM task_runs t
+                JOIN workflow_runs r ON r.id=t.run_id
+                JOIN project_members m ON m.project_id=r.project_id AND m.user_id=:user_id
+                LEFT JOIN LATERAL (
+                    SELECT attempt_no,dispatch_generation,worker_id,status,error_code,
+                           started_at,finished_at
+                    FROM task_attempts WHERE task_run_id=t.id
+                    ORDER BY attempt_no DESC LIMIT :limit OFFSET :offset
+                ) a ON true WHERE t.id=:id ORDER BY a.attempt_no DESC"""),
+            {"id": task_id, "user_id": actor.user_id, "limit": limit, "offset": offset},
+        )
+        rows = result.mappings().all()
+        if not rows:
+            raise ApiError(404, "NOT_FOUND", "Task not found")
+        return [dict(row) for row in rows if row["attempt_no"] is not None]

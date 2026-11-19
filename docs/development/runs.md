@@ -5,12 +5,15 @@ OWNER and DEVELOPER can create runs from an explicit published workflow version.
 | Endpoint | Contract |
 |---|---|
 | `POST /api/v1/workflows/{workflow_id}/runs` | Accepts `{"version": 1, "input": {"document": {"title": "Example", "content": "Text"}}}`. Returns `202`, `{run_id, status}` and `Location: /api/v1/runs/{run_id}`. |
-| `GET /api/v1/runs` | Lists metadata in projects where the caller is a member. Optional `project_id` restricts the list to one visible project. Orders by newest creation time, then descending ID. |
+| `GET /api/v1/runs` | Lists metadata in visible projects. Optional filters are `project_id`, `workflow_id`, `status`, `created_from`, and `created_to`. Orders by newest creation time, then descending ID. |
 | `GET /api/v1/runs/{run_id}` | Returns run, project, workflow and published version IDs, version number, creator, status and timestamps. |
 | `POST /api/v1/runs/{run_id}/cancel` | Returns `200` with the run metadata. The request needs no body or idempotency key. A terminal run is returned with its original status and timestamps. |
 | `GET /api/v1/runs/{run_id}/tasks` | Returns task ID, node key, status, attempt count and direct predecessor IDs, ordered by node key. |
+| `GET /api/v1/tasks/{task_id}/attempts` | Returns attempt number, generation, worker ID, status, error code and timestamps, newest attempt first. Project members can read it. Tasks without attempts and empty pages return `[]`. |
 
 Lists accept `limit` (default 20, max 100) and `offset` (default 0). Input, its fingerprint and idempotency keys stay in storage.
+
+Creation-time filters require ISO 8601 timestamps with an offset or UTC marker. The lower bound is inclusive and the upper bound exclusive. An invalid or reversed range returns `422 INVALID_TIME_RANGE`. A workflow outside the selected or visible project returns `404`. Attempt responses omit runtime leases, tokens and task payloads.
 
 Run creation accepts an application/json body up to 64 KiB, including the surrounding version and input fields. Version is a positive PostgreSQL integer. Input must be a JSON object. Oversize requests return `413`, incorrect media types return `415` and invalid JSON or input returns `422`. All `run_input` pointers in the selected snapshot must resolve before persistence. A missing value yields `422 INPUT_BINDING_INVALID`. JSON null is a value. The worker checks handler payload types and resolves `task_output` pointers when the handler runs.
 

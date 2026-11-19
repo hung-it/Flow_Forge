@@ -1,7 +1,7 @@
 # Auth and Projects API
 
 Implemented for local MVP: bootstrap user, JWT login/me, rotating refresh cookie, session-scoped logout,
-project metadata, membership and ownership transfer. No login UI, public registration, password reset,
+project metadata, membership and ownership transfer. The dashboard supports sign-in for bootstrapped accounts. Public registration, password reset,
 OAuth provider, MFA, invitations, account deletion or project deletion in this milestone.
 
 ## Start and create users
@@ -23,7 +23,7 @@ Open http://localhost:8000/docs. On POST /api/v1/auth/login set **X-FlowForge-CS
 then submit JSON email/password. The response contains access_token, token_type=bearer and expires_in=1800.
 The browser stores the refresh cookie. Use Swagger's Authorize button with the access token for protected APIs.
 POST refresh/logout use the same CSRF header and body `{}`. GET me reads the current principal.
-The frontend currently only shows infrastructure health; login screens are a later milestone.
+The dashboard starts a session on the same origin as its API proxy and keeps the access token in memory. Tabs on that origin coordinate login, refresh and logout through Web Locks. Use one dashboard origin per host while testing browser sessions because the refresh cookie is host-scoped. An ambiguous logout displays a retry prompt.
 
 ## Session contract
 
@@ -41,7 +41,7 @@ The frontend currently only shows infrastructure health; login screens are a lat
 - Rotation is atomic under the session lock. A known consumed token revokes that session and returns 401.
   A random unknown token returns 401 without revoking an unrelated session.
 - Strict race policy: concurrent refreshes of one token can return 200 + 401 and revoke even the winner's
-  newly issued credentials. Future clients must coordinate a single refresh across requests/tabs.
+  newly issued credentials. The dashboard coordinates refreshes across requests and same-origin tabs.
 - Logout uses the refresh cookie, including when access JWT has expired. Repeated logout returns 204.
   It revokes only the current session. Requests already authenticated/in flight may complete;
   requests checking the session after logout commit fail. Mutations recheck/lock the session in transaction.

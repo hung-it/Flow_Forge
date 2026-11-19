@@ -1,0 +1,4 @@
+FROM ghcr.io/puppeteer/puppeteer:25.17.0
+WORKDIR /home/pptruser
+COPY tooling/dashboard-smoke.mjs ./
+COPY examples/document-workflow.json ./

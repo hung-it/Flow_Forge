@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Path, Request
+from fastapi import APIRouter, Path, Query, Request
 from pydantic import BaseModel, Field
 
 from flowforge.auth.routes import CurrentUser
@@ -65,9 +65,10 @@ async def create(
 
 @router.get("/projects/{project_id}/workflows", response_model=list[WorkflowOutput])
 async def listing(
-    project_id: UUID, request: Request, actor: CurrentUser, limit: Limit = 20, offset: Offset = 0
+    project_id: UUID, request: Request, actor: CurrentUser, limit: Limit = 20, offset: Offset = 0,
+    q: Annotated[str, Query(max_length=100)] = "",
 ) -> list[dict[str, Any]]:
-    return await service.listing(request.app.state.engine, actor, project_id, limit, offset)
+    return await service.listing(request.app.state.engine, actor, project_id, limit, offset, q)
 
 
 @router.get("/workflows/{workflow_id}", response_model=WorkflowOutput)

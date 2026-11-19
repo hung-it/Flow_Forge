@@ -68,7 +68,7 @@ async def create(engine: AsyncEngine, actor: Principal, project: UUID, name: str
 
 
 async def listing(
-    engine: AsyncEngine, actor: Principal, project: UUID, limit: int, offset: int
+    engine: AsyncEngine, actor: Principal, project: UUID, limit: int, offset: int, query: str = "",
 ) -> list[dict[str, Any]]:
     async with engine.connect() as conn:
         await visible(conn, actor, project)
@@ -77,8 +77,9 @@ async def listing(
                 text("""SELECT w.*,
           (SELECT max(version) FROM workflow_versions v WHERE v.workflow_id=w.id) AS latest_version
           FROM workflow_definitions w WHERE project_id=:p
+          AND strpos(lower(w.name), lower(:q)) > 0
           ORDER BY created_at,id LIMIT :lim OFFSET :off"""),
-                dict(p=project, lim=limit, off=offset),
+                dict(p=project, lim=limit, off=offset, q=query.strip()),
             )
         ).mappings()
         return [dict(row) for row in rows]

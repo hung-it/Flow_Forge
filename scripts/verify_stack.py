@@ -31,8 +31,9 @@ def main():
     env["FLOWFORGE_JWT_SECRET"] = secrets.token_urlsafe(48)
     base = ["docker", "compose", "--env-file", ".env.example", "-p", project]
 
-    def compose(*args, expected=0):
+    def compose(*args, expected=0, input_text=None):
         result = subprocess.run(base + list(args), check=False, cwd=ROOT, env=env,
+                                input=input_text,
                                 encoding="utf-8", errors="replace",
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         if result.returncode != expected:
@@ -61,6 +62,15 @@ def main():
                        "flowforge", "-At", "-v", "ON_ERROR_STOP=1", "-c", query).strip()
 
     reports = ROOT / "reports" / project
+
+    def dashboard(phase):
+        accounts = compose("exec", "-T", "api", "python", "integration/dashboard_accounts.py")
+        output = compose("run", "--rm", "--no-deps", "-T", "dashboard-smoke", phase,
+                         input_text=accounts.splitlines()[-1])
+        with (reports / "dashboard-smoke.log").open("a", encoding="utf-8") as log:
+            log.write(output)
+        print(output, flush=True)
+
     def healthy(role):
         try:
             compose("exec", "-T", role, "python", "-m", "flowforge.process", role, "--health")
@@ -73,6 +83,7 @@ def main():
     try:
         compose("build", "api")
         compose("build", "frontend")
+        compose("--profile", "smoke", "build", "dashboard-smoke")
         compose("up", "-d", "--no-build", "--wait", "--wait-timeout", "180")
         assert status("/health/ready") == 200
         with urllib.request.urlopen(
@@ -113,6 +124,11 @@ def main():
         compose("up", "-d", "--no-build", "--wait", "--wait-timeout", "180")
         print(compose("exec", "-T", "api", "python", "integration/dispatch_acceptance.py",
                       "execution"), flush=True)
+
+        dashboard("full")
+        compose("stop", "scheduler", "publisher", "worker")
+        dashboard("cancel")
+        compose("up", "-d", "--no-build", "--wait", "scheduler", "publisher", "worker")
 
         compose("stop", "postgres")
         assert status("/health/live") == 200
@@ -168,7 +184,7 @@ def main():
             compose("down", "--volumes", "--remove-orphans")
 
     (reports / "result.txt").write_text(
-        "PASS: build, integration, proxy, outages, SIGTERM, migrations, log capture, cleanup\n",
+        "PASS: build, integration, browser, proxy, outages, SIGTERM, migrations, cleanup\n",
         encoding="utf-8",
     )
     print(f"PASS. Evidence: {reports}", flush=True)
