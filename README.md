@@ -10,7 +10,7 @@ FlowForge is a distributed workflow engine built with FastAPI, PostgreSQL and Ra
 
 ## Verification
 
-The worker milestone passed **118 tests** in GitLab with PostgreSQL and RabbitMQ. The Compose smoke covers HTTP requests, database and broker recovery, and execution of queued work after a migration. [Worker milestone pipeline](https://gitlab.com/hung-it/flow_forge/-/pipelines/3084257493) · [Verification notes](docs/development/verification.md)
+The worker milestone passed **118 tests** in GitLab with PostgreSQL and RabbitMQ. The Compose smoke covers HTTP requests, database and broker recovery, and execution of queued work after a migration. [Passing smoke job](https://gitlab.com/hung-it/flow_forge/-/jobs/18145575135) · [Verification notes](docs/development/verification.md)
 
 Run `./scripts/smoke.ps1` to reproduce the end-to-end checks in a temporary Compose project. The [sample document workflow](examples/document-workflow.json) shows parallel metadata extraction and content analysis joined into a single report. Run `./scripts/check.ps1` for lint, type checks, unit tests, dependency audits and diagrams.
 
