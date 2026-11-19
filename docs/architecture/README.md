@@ -1,7 +1,6 @@
 # Kiến trúc FlowForge
 
-Trạng thái: API health, Auth/Projects/membership, migrations identity/sessions, DAG/message validation,
-process lifecycle và giao diện kết nối đã có code. Workflow engine và login UI vẫn chưa triển khai.
+Đã triển khai Auth/Projects, workflow draft/version, Run/Task persistence, Scheduler/Outbox và Worker execution với lease fencing, retry và recovery. Giao diện hiện có màn hình kiểm tra kết nối. Run cancellation và dashboard thuộc các mốc sau.
 Nguồn chính: tài liệu trong repo và [progress plan v2](../../tasks/plan.md).
 Xem [execution contracts v1](execution-contracts.md) cho DAG, handler, transaction, broker và limits.
 
@@ -34,7 +33,7 @@ flowchart LR
 ```
 
 Compose là một host local, DB/broker chỉ trong network nội bộ, named volumes riêng. Migration là one-shot trước các process. Observability hiện có JSON logs; metrics/traces bổ sung tuần 9.
-Một image backend, entrypoint API bằng uvicorn, các role còn lại qua python -m flowforge.process ROLE. Role scaffold chỉ probe dependency, chưa consume/schedule.
+Một image backend, entrypoint API bằng uvicorn, các role còn lại qua `python -m flowforge.process ROLE`. Scheduler mở task theo DAG, Publisher đẩy event từ outbox, Worker nhận message và chạy handler.
 
 ## 3 Module boundaries
 
@@ -50,7 +49,6 @@ flowchart TD
 ```
 
 Domain không import FastAPI, SQLAlchemy hoặc RabbitMQ. Service sở hữu transaction; không giữ lock trong lúc handler chạy.
-Scaffold hiện dùng api.py, persistence.py và process.py; tách thành package khi tính năng tương ứng xuất hiện, không tạo module rỗng.
 
 ## 4 ERD
 
@@ -90,7 +88,7 @@ stateDiagram-v2
  RUNNING --> FAILED: permanent error or attempts exhausted
 ```
 
-Mọi task chưa terminal có thể chuyển CANCELED khi hủy run. Terminal không chuyển trạng thái.
+Thiết kế cho mốc cancellation cho phép chuyển task chưa terminal sang CANCELED. Terminal không chuyển trạng thái.
 Independent branches tiếp tục nếu một nhánh lỗi; descendants bị SKIPPED. Run hoàn tất khi tất cả task terminal.
 ```mermaid
 stateDiagram-v2
@@ -102,7 +100,7 @@ stateDiagram-v2
  RUNNING --> CANCELED: cancel and invalidate leases
 ```
 Attempt: RUNNING → SUCCEEDED / FAILED / LOST / CANCELED. Lease timeout ghi LOST; retry mới tạo attempt_no mới.
-Hủy run khóa row run trước task, vô hiệu token và hủy task chưa terminal trong một transaction. Worker commit cũng kiểm tra run và token theo cùng lock order. Không hoàn tác external side effects.
+Ở mốc cancellation, thao tác hủy sẽ khóa row run trước task, vô hiệu token và hủy task chưa terminal trong một transaction. Worker commit đã kiểm tra run và token theo cùng lock order. External side effects cần idempotency ở đích.
 
 ## 6 Dispatch thành công
 
@@ -164,21 +162,22 @@ Handler chạy ngoài transaction; không cho người dùng nộp mã Python/sh
 flowchart LR
  Push[GitHub branch push] --> Sync[Actions sync current ref]
  Sync --> Mirror[GitLab repository]
- Mirror --> Checks[Lint / typecheck / unit / frontend build]
- Checks --> Smoke[Compose build / migration / probes]
- Smoke --> SHA[Manually compare successful SHA]
+ Mirror --> Checks[Backend / frontend / diagrams]
+ Checks --> SHA[Verify successful pipeline SHA]
+ Mirror --> Smoke[Compose integration smoke after backend check]
+ Smoke --> SHA
  SHA --> Merge[Merge PR on GitHub]
 ```
 
 ## Contracts
 
 API prefix /api/v1; snake_case; UUID string; timestamps UTC; limit/offset default 20 max 100.
-Planned endpoints: POST auth/login; GET auth/me; GET/POST projects; GET/POST projects/{id}/workflows; POST workflows/{id}/versions; GET workflows/{id}/versions/{version}; POST workflows/{id}/runs; GET runs; GET runs/{id}; GET runs/{id}/tasks; GET tasks/{id}/attempts; POST runs/{id}/cancel.
+Các route đã triển khai được liệt kê trong Swagger UI của API. Run cancellation và route xem attempt thuộc các mốc tiếp theo.
 Run input: version (positive integer), input (JSON object). POST run returns 202 with run_id and status. Optional Idempotency-Key scoped to project: canonical hash includes workflow ID, explicit version and input; equal key/hash returns original run, different hash returns 409. Keys retained with run.
 Errors: code, message, details, request_id. Invalid input 422, unauthenticated 401, cross-project 404, insufficient role within visible project 403.
 Auth MVP: local bootstrap-user command, no public registration, Argon2 passwords; JWT access tokens expire in 30 minutes. OWNER manages membership/workflows/runs; DEVELOPER publishes and runs; VIEWER reads. Owner membership maintained atomically.
 Message v1: schema_version, event_id, run_id, task_run_id, dispatch_generation, traceparent (optional). Task data stays in DB; consumer checks schema and current generation.
-Health, Auth, Projects/membership, Workflow/draft/version and Run/Task persistence routes are implemented. Run execution remains planned. See [workflow API](../development/workflows.md) and [run API](../development/runs.md).
+See [workflow API](../development/workflows.md), [run API](../development/runs.md) and [worker execution](../development/worker.md).
 Auth now includes rotating HttpOnly refresh cookies and server-side session revocation per the accepted
 2026-11-16 plan. See [auth contracts and usage](../development/auth.md).
 

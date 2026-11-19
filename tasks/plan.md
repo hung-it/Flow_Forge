@@ -1,6 +1,6 @@
 # FlowForge — Plan v2 và nhật ký tiến trình
 
-Cập nhật **2026-11-18** (Asia/Ho_Chi_Minh). File theo dõi chính sau mỗi buổi làm việc.
+Cập nhật **2026-11-19** (Asia/Ho_Chi_Minh). File theo dõi chính sau mỗi buổi làm việc.
 FlowForge **10 tuần**, tổng hai project **19 tuần**, 12–15 giờ/tuần.
 Tài liệu trong repo là nguồn duy trì; hai tài liệu ngoài repo là đề xuất v1.
 Xem [document authority](../docs/source-documents.md).
@@ -12,14 +12,30 @@ commit tài liệu 7d5ef78 cũng xanh ở pipeline 3077804397.
 Run/Task persistence và Idempotency-Key đã pass test PostgreSQL, full Compose smoke local
 và hai job smoke GitLab tại `197d78f`. Pipeline tổng còn đỏ vì audit frontend.
 Scheduler/Outbox đã pass full Compose smoke local và hai job smoke GitLab tại `d0b3d3c`.
-Worker execution, lease fencing và retry đã triển khai. Mục nghiệm thu nằm ngay bên dưới.
+Worker execution, lease fencing và retry đã pass full Compose smoke local và hai GitLab smoke
+tại `564237e`. Mốc chức năng tiếp theo là cancellation và fault injection mở rộng.
+
+## Nhật ký 2026-11-19 — Chuẩn bị tích hợp vào `main`
+
+- GitHub rút advisory [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf) ngày 2026-11-18. Chạy lại `npm audit --audit-level=high` trên lockfile đã nâng TypeScript ESLint, kết quả 0 cảnh báo. Gate CI tiếp tục chạy lệnh audit đầy đủ.
+- README tiếng Anh tóm tắt kiến trúc, đưa các bằng chứng kiểm thử và hướng dẫn chạy demo lên đầu. Trang kiến trúc được cập nhật theo trạng thái đã triển khai.
+- `scripts/check.ps1` pass với 57 unit tests, coverage contract 100%, audit dependency và 9 sơ đồ Mermaid. Bước nghiệm thu tiếp theo là xác nhận pipeline GitLab xanh cùng commit trước khi merge vào `main`.
+
+## Nhật ký 2026-11-18 — Audit frontend
+
+- Nâng TypeScript ESLint lên `8.73.0`. Lockfile dùng `minimatch@11.0.8` và audit đầy đủ còn 0 cảnh báo moderate. `npm ci`, lint, typecheck và build pass. Audit dependency production báo 0 cảnh báo.
+- `npm audit --audit-level=high` vẫn exit 1. Cả 10 mục high đều quy về [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf) của `picomatch@4.0.7`, do Vite và TypeScript ESLint kéo vào. Advisory chưa có bản vá phát hành. Tiếp tục theo dõi bản vá và chạy lại gate đầy đủ trước khi xác nhận CI xanh.
+- Full Compose smoke local pass với 118 tests, đủ các ngưỡng coverage, frontend proxy, HTTP acceptance, phục hồi DB/broker và migration. Bằng chứng ở `reports/ff-foundation-f05b0c360b2c/result.txt`.
 
 ## Nhật ký 2026-11-18 — Worker execution và lease fencing
 
 - Migration `0007_worker_execution` bổ sung task lease/deadline, retry, result và attempt. Worker claim theo run/task/event/generation. Mỗi attempt có token mới, lease 30 giây và heartbeat 10 giây giới hạn bởi hard deadline.
 - Worker chạy năm handler demo từ snapshot đã publish, validate binding và output, commit có fencing rồi ACK. Scheduler thu hồi lease, phân loại mất worker/timeout và retry theo snapshot. API cancel thuộc mốc sau.
 - PostgreSQL và RabbitMQ thật chạy **118 tests pass**, Worker **88,7% coverage**. Ruff, mypy và tất cả gate 80% pass. Bốn consumer dùng RabbitMQ thật kiểm tra linear/fork-join, duplicate và DLQ. Các ca commit/ACK/DB fault và lease hết hạn đã được kiểm chứng.
-- Đang nghiệm thu full Compose smoke và hai GitLab smoke cùng SHA, gồm kiểm tra worker xử lý backlog sau migration 0007. Audit frontend bắt buộc vẫn báo picomatch, audit dependency production báo 0.
+- Full Compose smoke local pass. Migration 0007 round trip giữ task QUEUED và outbox PENDING. Worker xử lý từ event gốc đến report, mỗi task của fixture có đúng một attempt. Broker/DB outage, SIGTERM, migration base/old/head và cleanup pass. Evidence `reports/ff-foundation-b85bfb360daa/`.
+- **Hai GitLab smoke pass tại `564237e`**. Pipeline [3084257493](https://gitlab.com/hung-it/flow_forge/-/pipelines/3084257493) và [3084257871](https://gitlab.com/hung-it/flow_forge/-/pipelines/3084257871) đều có 118 tests pass, coverage gate, HTTP acceptance, broker recovery, migration giữ backlog và worker thực thi event gốc đến report. Backend và diagrams pass.
+- Pipeline tổng vẫn đỏ ở gate audit frontend bắt buộc do picomatch. Audit dependency production báo 0. Tiếp tục theo dõi bản vá [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf).
+- Trong các ca đã kiểm thử, không còn lỗi Worker đã biết. Bước tiếp theo: cancellation nguyên tử, requeue/worker crash drill và các race với heartbeat, commit hoặc scheduler completion.
 
 ## Nhật ký 2026-11-18 — Scheduler/Outbox
 

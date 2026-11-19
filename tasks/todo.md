@@ -35,7 +35,7 @@
 - [x] Scheduler/Outbox, durable messaging, claim fencing và redrive trên PostgreSQL/RabbitMQ local
 - [x] Full Compose smoke và hai lượt GitLab smoke cho Scheduler/Outbox tại d0b3d3c (3084131219, 3084131467, 107 tests/lần)
 - [x] Worker execution, lease/fencing, retry và recovery trong giới hạn snapshot đã qua test local
-- [ ] Full Compose smoke và hai lượt GitLab smoke cho Worker
+- [x] Full Compose smoke và hai lượt GitLab smoke cho Worker tại 564237e (3084257493, 3084257871, 118 tests/lần)
 - [ ] Cancellation và failure injection mở rộng
 - [ ] Dashboard workflow/run/attempt views
 - [ ] Metrics/traces, benchmark, release video

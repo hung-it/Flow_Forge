@@ -155,3 +155,13 @@ The overall GitLab pipelines and local `check.ps1` still fail on the mandatory f
 Local PostgreSQL and RabbitMQ checks passed all 107 tests. Coverage was 100% for Scheduler and 95.6% for Publisher/Outbox. All domains passed their 80% gates. Ruff and mypy passed. Isolated Compose smoke passed HTTP dispatch during broker outage, confirmed delivery of the same event after recovery, database recovery, SIGTERM and migration round trips. Local evidence is in `reports/ff-foundation-7c8eb1b489e3/`.
 
 Both GitLab smoke jobs passed at `d0b3d3c` with 107 tests each, broker stop/start and delivery checks, and migration preservation of run, task and dependency rows. Both pipelines passed backend and diagrams. The frontend audit remains a failing gate. [Feature smoke](https://gitlab.com/hung-it/flow_forge/-/jobs/18144601641) · [Independent smoke](https://gitlab.com/hung-it/flow_forge/-/jobs/18144603776).
+
+## Worker execution — 2026-11-18
+
+Local PostgreSQL and RabbitMQ checks passed all 118 tests. Worker coverage was 88.7%, and every domain passed its 80% gate. Ruff and mypy passed. Four RabbitMQ consumers executed the linear and fork/join fixtures. Tests cover duplicate claims, lease fencing, recovery and retry, rollback, database/ACK failure boundaries and dead-letter routing. Full isolated Compose smoke passed, including broker/database outage recovery and execution of a backlog held across migration 0007. Local evidence is in `reports/ff-foundation-b85bfb360daa/`.
+
+Both GitLab smoke jobs passed at `564237e` with 118 tests each. Both preserved the queued task and pending outbox during the migration round trip and executed the same dispatch through the final report. Backend and diagrams passed. The full frontend audit failed in those runs. [Feature smoke](https://gitlab.com/hung-it/flow_forge/-/jobs/18145575135) · [Independent smoke](https://gitlab.com/hung-it/flow_forge/-/jobs/18145578919).
+
+## Frontend audit — 2026-11-19
+
+After upgrading TypeScript ESLint to `8.73.0` and the withdrawal of the picomatch advisory, `npm audit --audit-level=high` reported zero vulnerabilities locally. The full audit remains a required CI check. [Withdrawn advisory](https://github.com/advisories/GHSA-fc5q-39xc-vjpf).
