@@ -117,13 +117,26 @@ def main() -> None:
     nodes = {task["task_id"]: task["node_key"] for task in tasks}
     edges = {(nodes[p], task["node_key"]) for task in tasks for p in task["predecessor_task_ids"]}
     assert edges == {tuple(edge) for edge in dag["edges"]}
+    cancel_path = run_path + "/cancel"
+    assert call(member, "POST", cancel_path, token=member_token)[0] == 403
+    status, canceled = call(owner, "POST", cancel_path, token=token)
+    assert status == 200 and canceled["status"] == "CANCELED"
+    assert canceled["started_at"] is None and canceled["finished_at"] is not None
+    assert call(owner, "POST", cancel_path, token=token) == (200, canceled)
+    assert call(member, "GET", run_path, token=member_token) == (200, canceled)
+    status, canceled_tasks = call(member, "GET", run_path + "/tasks", token=member_token)
+    expected_tasks = [{**task, "status": "CANCELED"} for task in tasks]
+    assert status == 200 and canceled_tasks == expected_tasks
+    assert call(owner, "POST", runs_path, run_body, token, key) == (
+        202, {**created, "status": "CANCELED"}
+    )
     status, payload = call(owner, "POST", "/auth/refresh", {})
     assert status == 200
     new_token = payload["access_token"]
     assert call(owner, "POST", "/auth/logout", {})[0] == 204
     assert call(owner, "GET", "/auth/me", token=new_token)[0] == 401
     assert call(member, "GET", "/auth/me", token=member_token)[0] == 200
-    print("PASS: HTTP auth/project RBAC, workflow publication, and run graph/idempotency")
+    print("PASS: HTTP auth/project RBAC, workflow publication, run idempotency and cancellation")
 
 
 if __name__ == "__main__":

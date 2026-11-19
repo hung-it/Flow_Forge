@@ -142,11 +142,14 @@ async def list_runs(
         return [dict(row) for row in rows.mappings()]
 
 
-async def _visible_run(conn: AsyncConnection, actor: Principal, run_id: UUID) -> dict[str, Any]:
+async def _visible_run(
+    conn: AsyncConnection, actor: Principal, run_id: UUID, *, lock: bool = False
+) -> dict[str, Any]:
+    query = RUN_METADATA + " WHERE r.id=:id" + (" FOR UPDATE OF r" if lock else "")
     row = (
         (
             await conn.execute(
-                text(RUN_METADATA + " WHERE r.id=:id"),
+                text(query),
                 {"user_id": actor.user_id, "id": run_id},
             )
         )
@@ -161,6 +164,50 @@ async def _visible_run(conn: AsyncConnection, actor: Principal, run_id: UUID) ->
 async def detail(engine: AsyncEngine, actor: Principal, run_id: UUID) -> dict[str, Any]:
     async with engine.connect() as conn:
         return await _visible_run(conn, actor, run_id)
+
+
+async def cancel(engine: AsyncEngine, actor: Principal, run_id: UUID) -> dict[str, Any]:
+    params = {"id": run_id}
+    async with engine.begin() as conn:
+        project = await conn.scalar(
+            text("SELECT project_id FROM workflow_runs WHERE id=:id"), params
+        )
+        if project is None:
+            raise ApiError(404, "NOT_FOUND", "Run not found")
+        membership = await visible(conn, actor, project, write=True, roles=EDITORS)
+        run = await _visible_run(conn, actor, run_id, lock=True)
+        if membership["role"] == "DEVELOPER" and run["created_by"] != actor.user_id:
+            raise ApiError(403, "FORBIDDEN", "Only the project owner or run creator can cancel")
+        if run["status"] not in ("PENDING", "RUNNING"):
+            return run
+
+        # Scheduler, publisher preflight and worker operations also take the run lock first.
+        await conn.execute(
+            text("SELECT id FROM task_runs WHERE run_id=:id ORDER BY id FOR UPDATE"), params
+        )
+        finished = await conn.scalar(text("SELECT clock_timestamp()"))
+        await conn.execute(
+            text("""UPDATE task_attempts a SET status='CANCELED',finished_at=:finished
+            FROM task_runs t WHERE t.id=a.task_run_id AND t.run_id=:id AND a.status='RUNNING'"""),
+            {**params, "finished": finished},
+        )
+        await conn.execute(
+            text("""UPDATE task_runs SET status='CANCELED',lease_token=NULL,lease_until=NULL,
+                hard_deadline=NULL,next_run_at=NULL
+            WHERE run_id=:id AND status IN ('PENDING','READY','QUEUED','RUNNING','RETRY_WAIT')"""),
+            params,
+        )
+        await conn.execute(
+            text("""UPDATE outbox_events e SET status='OBSOLETE',claim_token=NULL,claim_until=NULL
+            FROM task_runs t WHERE t.id=e.task_run_id AND t.run_id=:id
+            AND e.status IN ('PENDING','CLAIMED')"""),
+            params,
+        )
+        await conn.execute(
+            text("UPDATE workflow_runs SET status='CANCELED',finished_at=:finished WHERE id=:id"),
+            {**params, "finished": finished},
+        )
+        return {**run, "status": "CANCELED", "finished_at": finished}
 
 
 async def tasks(

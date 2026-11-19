@@ -97,6 +97,11 @@ async def detail(run_id: UUID, request: Request, actor: CurrentUser) -> dict[str
     return await service.detail(request.app.state.engine, actor, run_id)
 
 
+@router.post("/runs/{run_id}/cancel", response_model=RunOutput)
+async def cancel(run_id: UUID, request: Request, actor: CurrentUser) -> dict[str, Any]:
+    return await service.cancel(request.app.state.engine, actor, run_id)
+
+
 @router.get("/runs/{run_id}/tasks", response_model=list[TaskOutput])
 async def tasks(
     run_id: UUID,
