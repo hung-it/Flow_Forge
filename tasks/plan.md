@@ -10,10 +10,18 @@ Xem [document authority](../docs/source-documents.md).
 Foundation, Auth/Projects và Workflow/draft/version API đã nghiệm thu. GitLab smoke của
 commit tài liệu 7d5ef78 cũng xanh ở pipeline 3077804397.
 Run/Task persistence và Idempotency-Key đã pass test PostgreSQL, full Compose smoke local
-và hai job smoke GitLab tại `197d78f`. Pipeline tổng còn đỏ vì audit frontend.
+và hai job smoke GitLab tại `197d78f`. Pipeline tổng tại commit đó đỏ vì audit frontend.
 Scheduler/Outbox đã pass full Compose smoke local và hai job smoke GitLab tại `d0b3d3c`.
 Worker execution, lease fencing và retry đã pass full Compose smoke local và hai GitLab smoke
-tại `564237e`. Mốc chức năng tiếp theo là cancellation và fault injection mở rộng.
+tại `564237e`. Bản tích hợp `main` tại `a5d1331` xanh cả bốn job [GitLab](https://gitlab.com/hung-it/flow_forge/-/pipelines/3087574383).
+Run cancellation và các drill Worker nằm trên `feat/run-cancellation`. Mốc chức năng sau khi nghiệm thu là dashboard workflow/run/attempt.
+
+## Nhật ký 2026-11-19 — Run cancellation và fault injection
+
+- `POST /api/v1/runs/{run_id}/cancel` trả metadata. OWNER hủy mọi run trong project, DEVELOPER hủy run mình tạo. Hủy lại trả trạng thái terminal đã lưu.
+- Transaction hủy dùng schema hiện có, giữ kết quả đã commit, vô hiệu lease và retry, đánh dấu outbox chưa ghi publish là `OBSOLETE`.
+- Thêm 21 test nghiệp vụ và crash drill trên PostgreSQL/RabbitMQ. Worker chết trước commit phải đến attempt mới. Worker chết sau commit trước ACK nhận lại cùng event và giữ đúng một attempt. Có acceptance qua HTTP trong Compose smoke.
+- `scripts/check.ps1` pass 57 unit tests, đủ audit và 9 sơ đồ. Phần triển khai ở `eb2ed11`. Kết quả remote theo SHA được ghi trong PR và [GitLab pipelines của nhánh](https://gitlab.com/hung-it/flow_forge/-/pipelines?ref=feat%2Frun-cancellation).
 
 ## Nhật ký 2026-11-19 — Chuẩn bị tích hợp vào `main`
 

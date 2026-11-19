@@ -31,11 +31,12 @@
 - [x] Run/Task persistence, Idempotency-Key và 100 request đồng thời trên PostgreSQL local
 - [x] Run/Task full Compose smoke local, gồm migration và HTTP acceptance
 - [x] Hai lượt GitLab smoke tại SHA 197d78f, pipeline 3083978303 và 3083978289, 100 tests mỗi lần
-- [ ] Pipeline GitLab xanh toàn bộ sau khi xử lý audit frontend GHSA-fc5q-39xc-vjpf
+- [x] Pipeline GitLab xanh toàn bộ trên `main` tại `a5d1331` sau khi GHSA-fc5q-39xc-vjpf được rút (3087574383)
 - [x] Scheduler/Outbox, durable messaging, claim fencing và redrive trên PostgreSQL/RabbitMQ local
 - [x] Full Compose smoke và hai lượt GitLab smoke cho Scheduler/Outbox tại d0b3d3c (3084131219, 3084131467, 107 tests/lần)
 - [x] Worker execution, lease/fencing, retry và recovery trong giới hạn snapshot đã qua test local
 - [x] Full Compose smoke và hai lượt GitLab smoke cho Worker tại 564237e (3084257493, 3084257871, 118 tests/lần)
-- [ ] Cancellation và failure injection mở rộng
+- [x] Cancellation API, race tests và hai ca Worker crash/redelivery
+- [ ] Full Compose smoke local và hai lượt GitLab smoke cùng SHA trên nhánh cancellation
 - [ ] Dashboard workflow/run/attempt views
 - [ ] Metrics/traces, benchmark, release video
