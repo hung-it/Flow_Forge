@@ -97,7 +97,9 @@ def trial(output, nodes, runs, inject_fault, provenance):
         load_env = {**env, "BENCHMARK_WORKFLOW": account["workflow_id"],
                     "BENCHMARK_RUNS": str(runs), "BENCHMARK_TOKEN": account.pop("token")}
         load_container = project + "-k6"
-        mount = f"type=bind,source={ROOT / 'scripts/benchmark-runs.js'},target=/benchmark.js,readonly"
+        mount = (
+            f"type=bind,source={ROOT / 'scripts/benchmark-runs.js'},target=/benchmark.js,readonly"
+        )
         command = [*DOCKER, "run", "--rm", "--name", load_container,
                    "--label", f"com.docker.compose.project={project}",
                    "--network", project + "_default",
@@ -184,8 +186,10 @@ def main():
         "clean_tree": not invoke(["git", "status", "--porcelain"]).strip(),
         "host_os": platform.platform(), "host_cpu": platform.processor(),
         "host_logical_cpus": os.cpu_count(), "started_utc": datetime.now(UTC).isoformat(),
-        "host_ram_bytes": int(invoke(["powershell", "-NoProfile", "-Command",
-                                     "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory"])),
+        "host_ram_bytes": int(invoke([
+            "powershell", "-NoProfile", "-Command",
+            "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory",
+        ])),
         "docker": json.loads(invoke([*DOCKER, "info", "--format",
                                      ('{"cpus":{{.NCPU}},"memory_bytes":{{.MemTotal}},'
                                       '"version":{{json .ServerVersion}}}')])),
