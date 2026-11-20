@@ -40,4 +40,6 @@
 - [x] Full Compose smoke local và hai lượt GitLab smoke tại `05d7e7c` trên nhánh cancellation, 139 tests mỗi lượt (3087655516, 3087682148)
 - [x] Dashboard workflow/run/attempt, DAG chỉ đọc, bảng task và quản lý thành viên
 - [ ] Full Compose smoke dashboard local và hai lượt GitLab smoke cùng SHA
-- [ ] Metrics/traces, benchmark, release video
+- [x] Metrics labels, trace context qua PostgreSQL/RabbitMQ và dashboard Grafana/Jaeger
+- [ ] Full Compose observability local và hai lượt GitLab smoke cùng SHA
+- [ ] Benchmark 1.000 task và release video

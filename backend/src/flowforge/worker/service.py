@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import RowMapping, text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from flowforge import observability as obs
 from flowforge.contracts import DispatchMessage, TaskSpec, WorkflowSpec
 from flowforge.runs.input import resolve_pointer
 
@@ -18,6 +19,11 @@ logger = logging.getLogger(__name__)
 ACTIVE = ("PENDING", "RUNNING")
 LEASE = 30
 BATCH = 50
+RETRY_REASONS = {
+    "HANDLER_FAILED": "handler_failed",
+    "TASK_TIMEOUT": "task_timeout",
+    "WORKER_LOST": "worker_lost",
+}
 
 
 class Disposition(Enum):
@@ -38,6 +44,19 @@ class Claim:
     token: UUID
     attempt: int
     spec: TaskSpec
+
+
+@dataclass(frozen=True)
+class AttemptEffect:
+    outcome: str
+    duration: float
+    retry_reason: str | None
+
+    def record(self) -> None:
+        if metrics := obs.metrics:
+            metrics.attempt(self.outcome, self.duration)
+            if self.retry_reason:
+                metrics.retries.labels(self.retry_reason).inc()
 
 
 def node_spec(dag: str, key: str) -> TaskSpec:
@@ -132,13 +151,8 @@ async def claim_task(
                 "started": started,
             },
         )
-    logger.info(
-        "claimed run=%s task=%s generation=%s attempt=%s",
-        claim.run_id,
-        claim.task_id,
-        claim.generation,
-        claim.attempt,
-    )
+    obs.log_event(logger, "worker.claimed", run_id=str(claim.run_id), task_id=str(claim.task_id),
+                  generation=claim.generation, attempt=claim.attempt, worker_id=worker_id)
     return claim
 
 
@@ -216,7 +230,7 @@ async def transition(
     retryable: bool,
     *,
     expired: bool = False,
-) -> bool:
+) -> AttemptEffect | None:
     retry = result is None and retryable and claim.attempt < claim.spec.retry.max_attempts
     status = "SUCCEEDED" if result is not None else ("RETRY_WAIT" if retry else "FAILED")
     policy = claim.spec.retry
@@ -240,20 +254,21 @@ async def transition(
         )
     ).one_or_none()
     if updated is None:
-        return False
+        return None
     attempt_status = (
         "SUCCEEDED" if result is not None else ("LOST" if error == "WORKER_LOST" else "FAILED")
     )
-    (
+    duration = (
         await conn.execute(
             text("""UPDATE task_attempts SET status=:status,error_code=:error,
         finished_at=clock_timestamp() WHERE task_run_id=:task AND attempt_no=:attempt
         AND dispatch_generation=:generation AND lease_token=:token AND status='RUNNING'
-        RETURNING id"""),
+        RETURNING EXTRACT(EPOCH FROM finished_at-started_at)"""),
             {**identity(claim), "status": attempt_status, "error": error},
         )
-    ).one()
-    return True
+    ).scalar_one()
+    reason = RETRY_REASONS.get(error or "", "other") if retry else None
+    return AttemptEffect(attempt_status.lower(), float(duration), reason)
 
 
 async def finish(
@@ -266,7 +281,11 @@ async def finish(
     async with engine.begin() as conn:
         if not await lock_active_run(conn, claim.run_id):
             return False
-        return await transition(conn, claim, result, error, retryable)
+        effect = await transition(conn, claim, result, error, retryable)
+    if effect is None:
+        return False
+    effect.record()
+    return True
 
 
 DUE = """((t.status='RUNNING' AND (t.lease_until<=clock_timestamp()
@@ -275,10 +294,11 @@ DUE = """((t.status='RUNNING' AND (t.lease_until<=clock_timestamp()
 
 
 async def recover(engine: AsyncEngine) -> int:
+    committed: list[tuple[RowMapping, AttemptEffect]] = []
     async with engine.begin() as conn:
         row = (
             await conn.execute(
-                text(f"""SELECT r.id,CAST(v.dag AS text) AS dag
+                text(f"""SELECT r.id,r.traceparent,CAST(v.dag AS text) AS dag
             FROM workflow_runs r JOIN workflow_versions v ON v.id=r.workflow_version_id
             WHERE r.status='RUNNING' AND EXISTS(SELECT 1 FROM task_runs t
                 WHERE t.run_id=r.id AND {DUE})
@@ -302,18 +322,35 @@ async def recover(engine: AsyncEngine) -> int:
             .all()
         )
         for task in tasks:
-            await recover_task(conn, row.id, row.dag, task)
-        return len(tasks)
+            effect = await recover_task(conn, row.id, row.dag, task)
+            if effect is not None:
+                committed.append((task, effect))
+    for task, effect in committed:
+        effect.record()
+        reason = "hard_deadline" if task["timed_out"] else "lease"
+        if metrics := obs.metrics:
+            metrics.expirations.labels(reason).inc()
+        with obs.span("scheduler.recover", parent=row.traceparent, root=True, attributes={
+            "flowforge.run.id": str(row.id), "flowforge.task.id": str(task["id"]),
+            "flowforge.dispatch.generation": task["dispatch_generation"],
+            "flowforge.attempt": task["attempt_count"], "flowforge.outcome": effect.outcome,
+        }):
+            obs.log_event(logger, "scheduler.recovered", run_id=str(row.id),
+                          task_id=str(task["id"]), attempt=task["attempt_count"],
+                          outcome=effect.outcome)
+    return len(tasks)
 
 
-async def recover_task(conn: AsyncConnection, run_id: UUID, dag: str, task: RowMapping) -> None:
+async def recover_task(
+    conn: AsyncConnection, run_id: UUID, dag: str, task: RowMapping,
+) -> AttemptEffect | None:
     if task["status"] == "RETRY_WAIT":
         await conn.execute(
             text("""UPDATE task_runs SET status='READY',next_run_at=NULL
             WHERE id=:id AND status='RETRY_WAIT' AND next_run_at<=clock_timestamp()"""),
             {"id": task["id"]},
         )
-        return
+        return None
     claim = Claim(
         run_id,
         task["id"],
@@ -323,4 +360,4 @@ async def recover_task(conn: AsyncConnection, run_id: UUID, dag: str, task: RowM
         node_spec(dag, task["node_key"]),
     )
     error = "TASK_TIMEOUT" if task["timed_out"] else "WORKER_LOST"
-    await transition(conn, claim, None, error, True, expired=True)
+    return await transition(conn, claim, None, error, True, expired=True)

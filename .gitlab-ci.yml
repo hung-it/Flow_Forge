@@ -43,6 +43,8 @@ smoke:
   script:
     - cp .env.example .env
     - printf '\nFLOWFORGE_JWT_SECRET=%s\n' "$(head -c 48 /dev/urandom | base64 | tr -d '\n')" >> .env
+    - export FLOWFORGE_GRAFANA_ADMIN_PASSWORD="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
+    - printf '\nFLOWFORGE_GRAFANA_ADMIN_PASSWORD=%s\n' "$FLOWFORGE_GRAFANA_ADMIN_PASSWORD" >> .env
     - docker compose build api
     - docker compose build frontend
     - docker compose --profile smoke build dashboard-smoke
@@ -95,18 +97,42 @@ smoke:
     - docker compose run --rm migrate alembic upgrade head
     - docker compose up -d --no-build --wait
     - docker compose exec -T api python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"
+    - |
+      set -o pipefail
+      telemetry() {
+        docker compose -f compose.yaml -f compose.observability.yaml --profile observability "$@"
+      }
+      phase() {
+        telemetry exec -T -e FLOWFORGE_GRAFANA_ADMIN_PASSWORD api \
+          python integration/telemetry_acceptance.py "$1" | tee -a reports/telemetry-smoke.log
+      }
+      docker compose stop publisher worker
+      telemetry up -d --no-build --wait api scheduler rabbitmq prometheus jaeger grafana
+      phase queued
+      telemetry up -d --no-build --wait publisher
+      phase broker
+      telemetry up -d --no-build --wait --scale worker=2 worker
+      phase completed
+      telemetry stop prometheus jaeger
+      phase offline
+      telemetry up -d --no-build --wait prometheus jaeger
+      phase restored
+      telemetry logs --no-color api scheduler publisher worker > reports/telemetry-roles.log
+      grep -F '"event": "run.created"' reports/telemetry-roles.log > /dev/null
+      grep -F '"trace_id":' reports/telemetry-roles.log > /dev/null
+      if grep -qF 'flowforge-observability-smoke-private-input' reports/telemetry-roles.log; then exit 1; fi
   after_script:
     - mkdir -p reports
     - docker compose cp api:/tmp/integration.xml reports/integration.xml || true
     - docker compose cp api:/tmp/coverage.json reports/coverage.json || true
-    - docker compose ps -a > compose-status.log
+    - docker compose -f compose.yaml -f compose.observability.yaml --profile observability ps -a > compose-status.log
     - |
-      containers=$(docker compose ps -aq)
+      containers=$(docker compose -f compose.yaml -f compose.observability.yaml --profile observability ps -aq)
       if [ -n "$containers" ]; then
         docker inspect --format '{{json .State}}' $containers > container-diagnostics.json
       fi
-    - docker compose logs --no-color > compose.log
-    - docker compose down -v
+    - docker compose -f compose.yaml -f compose.observability.yaml --profile observability logs --no-color > compose.log
+    - docker compose -f compose.yaml -f compose.observability.yaml --profile observability down -v --remove-orphans
   artifacts:
     when: always
     expire_in: 7 days
@@ -117,6 +143,7 @@ smoke:
       - reports/integration.xml
       - reports/coverage.json
       - reports/dashboard-smoke.log
+      - reports/telemetry-smoke.log
     reports:
       junit: reports/integration.xml
 diagrams:

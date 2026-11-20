@@ -1,0 +1,40 @@
+x-telemetry: &telemetry
+  FLOWFORGE_TELEMETRY_ENABLED: 'true'
+
+services:
+  api:
+    environment: *telemetry
+  scheduler:
+    environment: *telemetry
+  publisher:
+    environment: *telemetry
+  worker:
+    environment: *telemetry
+  rabbitmq:
+    volumes:
+      - ./observability/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:v3.16.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=1d
+      - --storage.tsdb.retention.size=256MB
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:13.3.1
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${FLOWFORGE_GRAFANA_ADMIN_PASSWORD:?set a local Grafana password}
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+    ports: ['127.0.0.1:${GRAFANA_PORT:-3000}:3000']
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+  jaeger:
+    profiles: [observability]
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.23.0
+    ports: ['127.0.0.1:${JAEGER_PORT:-16686}:16686']

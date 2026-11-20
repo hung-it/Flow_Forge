@@ -6,6 +6,7 @@ from aio_pika.exceptions import AMQPException
 from pamqp.commands import Basic
 
 from flowforge.contracts import DispatchMessage
+from flowforge.observability import trace_header
 
 TASKS = "flowforge.tasks.v1"
 DEAD = "flowforge.dead.v1"
@@ -66,12 +67,14 @@ class Broker:
         await self.ensure()
         assert self.exchange is not None
         payload = event.model_dump_json(exclude_none=True).encode("utf-8")
+        context = trace_header()
         result = await self.exchange.publish(
             aio_pika.Message(
                 payload,
                 content_type="application/json",
                 delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
                 message_id=str(event.event_id),
+                headers={"traceparent": context} if context else None,
             ),
             routing_key=TASK_KEY,
             mandatory=True,

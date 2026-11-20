@@ -14,4 +14,4 @@ ENV PYTEST_ADDOPTS="-o cache_dir=/tmp/flowforge-pytest"
 ENV COVERAGE_FILE="/tmp/flowforge.coverage"
 RUN useradd --uid 10001 --create-home app
 USER app
-CMD ["uvicorn", "flowforge.api:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers"]
+CMD ["uvicorn", "flowforge.api:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers", "--no-access-log"]

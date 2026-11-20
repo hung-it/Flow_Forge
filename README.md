@@ -8,10 +8,11 @@ FlowForge is a distributed workflow engine built with FastAPI, PostgreSQL and Ra
 - **Durable dispatch.** The scheduler records ready work and its outbox event in one PostgreSQL transaction. A separate publisher sends persistent RabbitMQ messages and waits for broker confirmation. [Scheduler and outbox](docs/development/dispatch.md)
 - **Recovery and cancellation.** Workers commit results with a valid lease before acknowledging messages. The scheduler recovers expired leases, and canceling a run fences active attempts and stops further dispatch. [Worker execution](docs/development/worker.md)
 - **Operations dashboard.** Sign in, manage project access, publish JSON workflows and inspect run graphs and task attempts.
+- **Metrics and distributed traces.** Use the Grafana dashboard to inspect queue pressure and task latency. Follow one run in Jaeger across the API, durable dispatch and Worker. [Observability demo](docs/development/observability.md)
 
 ## Verification
 
-The worker milestone passed **118 tests** in GitLab with PostgreSQL and RabbitMQ. The Compose smoke covers HTTP requests, database and broker recovery, and execution of queued work after a migration. [Passing smoke job](https://gitlab.com/hung-it/flow_forge/-/jobs/18145575135) · [Verification notes](docs/development/verification.md)
+The dashboard milestone passed **141 tests** in GitLab with PostgreSQL and RabbitMQ. The current Compose smoke covers browser and HTTP flows, database and broker recovery, migration compatibility, Prometheus queries and trace relationships in Jaeger. [Dashboard pipeline](https://gitlab.com/hung-it/flow_forge/-/pipelines/3087808351) · [Verification notes](docs/development/verification.md)
 
 Run `./scripts/smoke.ps1` to reproduce the end-to-end checks in a temporary Compose project. The [sample document workflow](examples/document-workflow.json) shows parallel metadata extraction and content analysis joined into a single report. Run `./scripts/check.ps1` for lint, type checks, unit tests, dependency audits and diagrams.
 

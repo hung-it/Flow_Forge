@@ -54,7 +54,7 @@ async def snapshots(
                         await conn.execute(
                             text(f"""SELECT (to_jsonb(t) - ARRAY[
                                 'dispatch_generation','lease_token','lease_until',
-                                'hard_deadline','next_run_at','result_json'])::text
+                                'hard_deadline','next_run_at','result_json','traceparent'])::text
                                 FROM {table} t ORDER BY 1""")
                         )
                     ).scalars()
@@ -70,6 +70,11 @@ def main(worker_only: bool = False) -> None:
         backlog = asyncio.run(snapshots(include_runs=True, include_outbox=True))
         assert any('"status": "PENDING"' in row for row in backlog["outbox_events"])
         assert all(backlog[table] for table in ("workflow_runs", "task_runs", "outbox_events"))
+        subprocess.run(["alembic", "downgrade", "0007_worker_execution"], check=True)
+        assert asyncio.run(snapshots(include_runs=True, include_outbox=True)) == backlog
+        subprocess.run(["alembic", "upgrade", "head"], check=True)
+        assert asyncio.run(snapshots(include_runs=True, include_outbox=True)) == backlog
+        print("PASS: trace context migration preserves run state and queued events")
         subprocess.run(["alembic", "downgrade", "0006_scheduler_outbox"], check=True)
         assert asyncio.run(snapshots(include_runs=True, include_outbox=True)) == backlog
         subprocess.run(["alembic", "upgrade", "head"], check=True)
