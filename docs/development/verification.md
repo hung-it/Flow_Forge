@@ -181,3 +181,17 @@ The full Compose runner and GitLab `smoke` job include both browser phases. The 
 The local observability smoke checked Grafana provisioning, Prometheus outbox and RabbitMQ backlog, two Worker targets, cancellation and the parent chain from API to Worker in Jaeger. A new workflow completed during a Prometheus and Jaeger outage. Trace export worked again after both services returned.
 
 The full Compose runner and GitLab `smoke` job include the browser flows, migration preservation and observability acceptance. Signal verification is recorded in `telemetry-smoke.log`. [Observability pipelines](https://gitlab.com/hung-it/flow_forge/-/pipelines?ref=feat%2Fobservability).
+
+## MVP integration and Windows benchmark — 2026-11-20
+
+| Milestone | Verified branch SHA | Independent GitLab pipelines | Smoke tests per pipeline |
+|---|---|---|---:|
+| Cancellation | `05d7e7c` | [Push](https://gitlab.com/hung-it/flow_forge/-/pipelines/3087655516) · [Manual](https://gitlab.com/hung-it/flow_forge/-/pipelines/3087682148) | 139 |
+| Dashboard | `7d1f8d7` | [Push](https://gitlab.com/hung-it/flow_forge/-/pipelines/3087808351) · [Manual](https://gitlab.com/hung-it/flow_forge/-/pipelines/3092756699) | 141 |
+| Observability | `83c2a96` | [Push](https://gitlab.com/hung-it/flow_forge/-/pipelines/3089037648) · [Manual](https://gitlab.com/hung-it/flow_forge/-/pipelines/3092757680) | 146 |
+
+All four jobs also passed after each merge into `main`. [Cancellation](https://gitlab.com/hung-it/flow_forge/-/pipelines/3092714507) · [Dashboard](https://gitlab.com/hung-it/flow_forge/-/pipelines/3092777547) · [Observability](https://gitlab.com/hung-it/flow_forge/-/pipelines/3092800202).
+
+A fresh HTTPS GitHub clone of `83c2a96` passed `check.ps1` with 60 unit tests and the full Windows Compose smoke with 146 tests. The first smoke invocation stopped when CP1258 could not print a Unicode arrow. The rerun used UTF-8, reached all eight coverage gates, passed both Chrome phases and the migrations and telemetry drills, and removed the isolated project resources. The smoke launcher now sets Python UTF-8 mode explicitly. The release source at `4260c8d` then passed both scripts directly on Windows. Full Compose smoke passed all 146 tests, eight coverage gates, both Chrome phases, migration round trips, and database, broker and telemetry recovery.
+
+The benchmark ran on Windows Docker Desktop from a clean `cdf3293` tree. The follow-up Ruff line wrapping in `4260c8d` preserved the Python syntax tree and benchmark behavior. All four 1,000-task trials completed with the expected attempt counts and drained RabbitMQ queues and outbox. The deliberate pre-commit Worker loss recovered in 29.90 s against a 90 s deadline. [Workload, exact results and raw evidence](benchmark.md). The [tag pipeline](https://gitlab.com/hung-it/flow_forge/-/pipelines?ref=v1.0.0) tracks the release commit, and the [GitHub release](https://github.com/hung-it/Flow_Forge/releases/tag/v1.0.0) holds the video and benchmark archive.
