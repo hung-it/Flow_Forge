@@ -7,7 +7,7 @@ $repoPath = Split-Path $PSScriptRoot
 Push-Location "$repoPath/backend"
 try {
     Run-Check { uv sync --frozen }
-    Run-Check { uv run ruff check . ../scripts/verify_stack.py }
+    Run-Check { uv run ruff check . ../scripts/verify_stack.py ../scripts/benchmark.py }
     Run-Check { uv run mypy }
     Run-Check { uv run pytest --cov=flowforge.contracts --cov-report=xml:../reports/coverage.xml --cov-fail-under=80 }
     Run-Check { uv export --quiet --frozen --no-emit-project --format requirements-txt --output-file ../reports/requirements-audit.txt }
