@@ -10,4 +10,4 @@ Scheduler records an expired lease as LOST and a reached hard deadline as TASK_T
 
 The [cancellation endpoint](runs.md#cancellation) invalidates active leases. A running handler receives a cooperative stop signal when heartbeat detects the lost lease. After a canceled or already completed delivery is requeued, the next consumer checks durable state and acknowledges it without running the handler again.
 
-Migration 0007 preserves queued tasks and outbox events. Downgrade drops worker metadata and refuses while RUNNING or RETRY_WAIT tasks exist. Use the downgrade rehearsal only in a disposable stack. The task-attempt read endpoint belongs to the dashboard milestone.
+Migration 0007 preserves queued tasks and outbox events. Downgrade drops worker metadata and refuses while RUNNING or RETRY_WAIT tasks exist. Use the downgrade rehearsal only in a disposable stack. The dashboard reads project-scoped attempt history through the [Run API](runs.md).

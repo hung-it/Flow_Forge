@@ -37,6 +37,7 @@
 - [x] Worker execution, lease/fencing, retry và recovery trong giới hạn snapshot đã qua test local
 - [x] Full Compose smoke và hai lượt GitLab smoke cho Worker tại 564237e (3084257493, 3084257871, 118 tests/lần)
 - [x] Cancellation API, race tests và hai ca Worker crash/redelivery
-- [ ] Full Compose smoke local và hai lượt GitLab smoke cùng SHA trên nhánh cancellation
-- [ ] Dashboard workflow/run/attempt views
+- [x] Full Compose smoke local và hai lượt GitLab smoke tại `05d7e7c` trên nhánh cancellation, 139 tests mỗi lượt (3087655516, 3087682148)
+- [x] Dashboard workflow/run/attempt, DAG chỉ đọc, bảng task và quản lý thành viên
+- [ ] Full Compose smoke dashboard local và hai lượt GitLab smoke cùng SHA
 - [ ] Metrics/traces, benchmark, release video

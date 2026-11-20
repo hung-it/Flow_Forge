@@ -4,7 +4,7 @@ Implemented under `/api/v1`; requires a live authenticated session. OWNER and DE
 
 ## HTTP contract
 
-- POST/GET `/projects/{project_id}/workflows`: create (`{name}`) or list.
+- POST/GET `/projects/{project_id}/workflows`: create (`{name}`) or list. The optional `q` list filter matches a case-insensitive literal substring of the workflow name, after trimming surrounding spaces. It accepts up to 100 characters.
 - GET/PATCH `/workflows/{workflow_id}`: detail or rename (`{name}`). Names are trimmed, 1?100 characters; duplicate names allowed.
 - GET `/workflows/{workflow_id}/draft`: current `{workflow_id,dag,revision,updated_by,updated_at}`.
 - PUT `/workflows/{workflow_id}/draft`: `{expected_revision,dag}` replaces the entire JSON object and increments revision, including identical saves. Stale revision returns 409 `DRAFT_REVISION_CONFLICT`.
@@ -36,7 +36,7 @@ All payload schemas are strict and reject extra fields. Binding names must match
 - aggregate: Summary -> Summary.
 - generate_report: `{summary: Summary}` -> `{summary: Summary, report_text: string}`.
 
-The [Run API](runs.md) persists runs from published versions and validates run-input pointers. Worker handlers, UI, retries and cancellation are later milestones.
+The [Run API](runs.md) persists runs from published versions and validates run-input pointers. The dashboard can inspect a published DAG and start a run from the selected version.
 
 ## Verification
 

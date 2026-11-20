@@ -165,3 +165,11 @@ Both GitLab smoke jobs passed at `564237e` with 118 tests each. Both preserved t
 ## Frontend audit — 2026-11-19
 
 After upgrading TypeScript ESLint to `8.73.0` and the withdrawal of the picomatch advisory, `npm audit --audit-level=high` reported zero vulnerabilities locally. The full audit remains a required CI check. [Withdrawn advisory](https://github.com/advisories/GHSA-fc5q-39xc-vjpf).
+
+## Workflow, run and attempt dashboard — 2026-11-19
+
+`scripts/check.ps1` passed 57 unit tests, lint, type checks, the frontend build, all dependency audits and nine diagram renders. Two focused dashboard tests passed on PostgreSQL with project isolation, search and filters, and attempt history pagination.
+
+Chrome passed both dashboard smoke phases against Compose. The first phase covers owner membership management, serialized refresh across two tabs, concurrent draft recovery, an immutable published DAG, a lost create-run response with replay of the same idempotency key, a real Worker run, attempt history, viewer access, and keyboard and mobile navigation. The second phase pauses the execution services to check canceling a pending run and reading its empty attempt history.
+
+The full Compose runner and GitLab `smoke` job include both browser phases. The run artifacts include `dashboard-smoke.log`, the PostgreSQL integration results, and coverage for each domain. [Dashboard pipelines](https://gitlab.com/hung-it/flow_forge/-/pipelines?ref=feat%2Fdashboard).

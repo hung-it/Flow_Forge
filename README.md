@@ -7,6 +7,7 @@ FlowForge is a distributed workflow engine built with FastAPI, PostgreSQL and Ra
 - **Versioned workflows and scoped access.** Project roles control who can publish and run workflows. Each run uses an explicit, immutable version. Repeating a create-run request with the same idempotency key and input returns the original run. [Workflow API](docs/development/workflows.md) · [Run API](docs/development/runs.md)
 - **Durable dispatch.** The scheduler records ready work and its outbox event in one PostgreSQL transaction. A separate publisher sends persistent RabbitMQ messages and waits for broker confirmation. [Scheduler and outbox](docs/development/dispatch.md)
 - **Recovery and cancellation.** Workers commit results with a valid lease before acknowledging messages. The scheduler recovers expired leases, and canceling a run fences active attempts and stops further dispatch. [Worker execution](docs/development/worker.md)
+- **Operations dashboard.** Sign in, manage project access, publish JSON workflows and inspect run graphs and task attempts.
 
 ## Verification
 
@@ -24,11 +25,11 @@ docker compose up -d --build --wait
 docker compose ps
 ```
 
-Open [the connection screen](http://localhost:5173) or [Swagger UI](http://localhost:8000/docs) to explore the API.
+Open the [dashboard](http://localhost:5173) after creating an account with the bootstrap command below. [Swagger UI](http://localhost:8000/docs) documents the API.
 Local credentials in the example are development-only. Database/broker ports are not published.
 init-env.ps1 generates a private signing key and refuses to overwrite an existing .env.
 For an existing .env, add FLOWFORGE_JWT_SECRET with at least 32 random bytes; keep it across restarts.
-Changing the signing key invalidates existing access JWTs. There is no login UI yet.
+Changing the signing key invalidates existing access JWTs. Use localhost or HTTPS in a browser with Web Locks support to allow safe session refresh across tabs.
 
 ```powershell
 docker compose exec api python -m flowforge.process worker --probe
@@ -38,6 +39,13 @@ docker compose down
 ```
 
 Stopping preserves volumes. Do not use `down -v` on data you want to retain.
+
+### Try a workflow
+
+1. Sign in and create a project. Add existing accounts from **Members**.
+2. Create a workflow and paste the [document workflow JSON](examples/document-workflow.json) into **Workflow JSON**. Save the draft and publish it.
+3. Enter `{"document":{"title":"Example","content":"A workflow run."}}` as the run input and start a run from the displayed version.
+4. Watch the execution graph update. Select a task’s attempt count to inspect its worker, timing and result status.
 
 ## Development checks
 
@@ -70,4 +78,4 @@ Background processes run in Linux containers; native Windows signal handling is 
 
 One backend image runs four roles: API, scheduler, publisher and worker. PostgreSQL stores execution state, and RabbitMQ provides at-least-once delivery. Lease fencing protects database writes. External side effects require idempotency at the destination.
 
-The current milestone runs built-in demo handlers and exposes workflow and run cancellation APIs. The workflow dashboard is next. AWS, arbitrary user code and Kubernetes are outside the MVP.
+The current milestone runs built-in demo handlers through the dashboard and API. AWS, arbitrary user code and Kubernetes are outside the MVP.

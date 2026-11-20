@@ -45,6 +45,7 @@ smoke:
     - printf '\nFLOWFORGE_JWT_SECRET=%s\n' "$(head -c 48 /dev/urandom | base64 | tr -d '\n')" >> .env
     - docker compose build api
     - docker compose build frontend
+    - docker compose --profile smoke build dashboard-smoke
     - |
       for service in postgres rabbitmq; do
         for attempt in 1 2 3; do
@@ -76,6 +77,16 @@ smoke:
     - docker compose run --rm --no-deps api python integration/migration_acceptance.py worker
     - docker compose up -d --no-build --wait
     - docker compose exec -T api python integration/dispatch_acceptance.py execution
+    - |
+      set -o pipefail
+      dashboard() {
+        docker compose exec -T api python integration/dashboard_accounts.py |
+          docker compose run --rm --no-deps -T dashboard-smoke "$1" |
+          tee -a reports/dashboard-smoke.log
+      }
+      dashboard full
+      docker compose stop scheduler publisher worker
+      dashboard cancel
     - docker compose cp api:/tmp/integration.xml reports/integration.xml
     - docker compose cp api:/tmp/coverage.json reports/coverage.json
     - docker compose stop api scheduler publisher worker frontend
@@ -99,7 +110,13 @@ smoke:
   artifacts:
     when: always
     expire_in: 7 days
-    paths: [compose.log, compose-status.log, container-diagnostics.json, reports/integration.xml, reports/coverage.json]
+    paths:
+      - compose.log
+      - compose-status.log
+      - container-diagnostics.json
+      - reports/integration.xml
+      - reports/coverage.json
+      - reports/dashboard-smoke.log
     reports:
       junit: reports/integration.xml
 diagrams:

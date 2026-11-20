@@ -58,6 +58,28 @@ class TaskOutput(BaseModel):
     predecessor_task_ids: list[UUID]
 
 
+class AttemptOutput(BaseModel):
+    attempt_no: int
+    dispatch_generation: int
+    worker_id: str
+    status: Literal["RUNNING", "SUCCEEDED", "FAILED", "LOST", "CANCELED"]
+    error_code: str | None
+    started_at: datetime
+    finished_at: datetime | None
+
+
+def timestamp_filter(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+        if parsed.utcoffset() is not None:
+            return parsed
+    except ValueError:
+        pass
+    raise ApiError(422, "INVALID_TIME_RANGE", "Use ISO 8601 timestamps with a time zone")
+
+
 @router.post("/workflows/{workflow_id}/runs", status_code=202, response_model=RunAccepted)
 async def create(
     workflow_id: UUID,
@@ -88,8 +110,18 @@ async def listing(
     project_id: UUID | None = None,
     limit: Limit = 20,
     offset: Offset = 0,
+    workflow_id: UUID | None = None,
+    status: RunStatus | None = None,
+    created_from: str | None = None,
+    created_to: str | None = None,
 ) -> list[dict[str, Any]]:
-    return await service.list_runs(request.app.state.engine, actor, project_id, limit, offset)
+    start, end = timestamp_filter(created_from), timestamp_filter(created_to)
+    if start is not None and end is not None and start >= end:
+        raise ApiError(422, "INVALID_TIME_RANGE", "End must be after start")
+    return await service.list_runs(
+        request.app.state.engine, actor, project_id, limit, offset,
+        workflow_id=workflow_id, status=status, created_from=start, created_to=end,
+    )
 
 
 @router.get("/runs/{run_id}", response_model=RunOutput)
@@ -111,3 +143,10 @@ async def tasks(
     offset: Offset = 0,
 ) -> list[dict[str, Any]]:
     return await service.tasks(request.app.state.engine, actor, run_id, limit, offset)
+
+
+@router.get("/tasks/{task_id}/attempts", response_model=list[AttemptOutput])
+async def attempts(
+    task_id: UUID, request: Request, actor: CurrentUser, limit: Limit = 20, offset: Offset = 0,
+) -> list[dict[str, Any]]:
+    return await service.attempts(request.app.state.engine, actor, task_id, limit, offset)

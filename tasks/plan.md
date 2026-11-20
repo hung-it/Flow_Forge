@@ -14,7 +14,16 @@ và hai job smoke GitLab tại `197d78f`. Pipeline tổng tại commit đó đ�
 Scheduler/Outbox đã pass full Compose smoke local và hai job smoke GitLab tại `d0b3d3c`.
 Worker execution, lease fencing và retry đã pass full Compose smoke local và hai GitLab smoke
 tại `564237e`. Bản tích hợp `main` tại `a5d1331` xanh cả bốn job [GitLab](https://gitlab.com/hung-it/flow_forge/-/pipelines/3087574383).
-Run cancellation và các drill Worker nằm trên `feat/run-cancellation`. Mốc chức năng sau khi nghiệm thu là dashboard workflow/run/attempt.
+Run cancellation và các drill Worker đã nghiệm thu trên `feat/run-cancellation` tại `05d7e7c`.
+Dashboard workflow/run/attempt nằm trên `feat/dashboard`, dựa trên PR cancellation đang chờ tích hợp.
+
+## Nhật ký 2026-11-19 — Dashboard workflow/run/attempt
+
+- Giao diện tiếng Anh có đăng nhập, chọn project, danh sách workflow và run. OWNER quản lý thành viên. OWNER và DEVELOPER chỉnh draft JSON, publish phiên bản và bắt đầu run. VIEWER có quyền đọc.
+- Giữ nội dung draft khi trùng revision. Khi phản hồi tạo run bị mất, nút retry gửi lại cùng `Idempotency-Key` và payload. Phiên đăng nhập dùng access token trong bộ nhớ và tuần tự hóa refresh giữa các tab.
+- Run có bộ lọc workflow, trạng thái, thời gian tạo. DAG chỉ đọc và bảng task lấy phiên bản gắn với run. Xem lịch sử attempt, theo dõi run khi tab hiện và hủy theo quyền của API.
+- Bổ sung test PostgreSQL cho cô lập project, tìm workflow, lọc run và lịch sử attempt. Chrome smoke kiểm tra luồng từ publish đến Worker thực thi, retry sau mất phản hồi, hủy run và quyền thành viên. Kết quả CI tra theo SHA trong [GitLab pipelines của dashboard](https://gitlab.com/hung-it/flow_forge/-/pipelines?ref=feat%2Fdashboard).
+- Sau khi dashboard qua nghiệm thu và được tích hợp, bước kế tiếp là metrics/traces cho API, Scheduler, Publisher và Worker. Tiếp theo đo benchmark, ghi kết quả và chuẩn bị demo release.
 
 ## Nhật ký 2026-11-19 — Run cancellation và fault injection
 
@@ -22,6 +31,7 @@ Run cancellation và các drill Worker nằm trên `feat/run-cancellation`. Mố
 - Transaction hủy dùng schema hiện có, giữ kết quả đã commit, vô hiệu lease và retry, đánh dấu outbox chưa ghi publish là `OBSOLETE`.
 - Thêm 21 test nghiệp vụ và crash drill trên PostgreSQL/RabbitMQ. Worker chết trước commit phải đến attempt mới. Worker chết sau commit trước ACK nhận lại cùng event và giữ đúng một attempt. Có acceptance qua HTTP trong Compose smoke.
 - `scripts/check.ps1` pass 57 unit tests, đủ audit và 9 sơ đồ. Phần triển khai ở `eb2ed11`. Kết quả remote theo SHA được ghi trong PR và [GitLab pipelines của nhánh](https://gitlab.com/hung-it/flow_forge/-/pipelines?ref=feat%2Frun-cancellation).
+- Full Compose smoke local và hai pipeline GitLab của `05d7e7c` pass với 139 tests mỗi lượt. [Pipeline push](https://gitlab.com/hung-it/flow_forge/-/pipelines/3087655516) · [Pipeline thủ công](https://gitlab.com/hung-it/flow_forge/-/pipelines/3087682148).
 
 ## Nhật ký 2026-11-19 — Chuẩn bị tích hợp vào `main`
 
@@ -210,17 +220,9 @@ Nhật ký bên dưới ghi kết quả trước restart; các trạng thái run
 
 ## Các bước tiếp theo theo thứ tự
 
-1. Review/commit/push nhánh feat/auth-projects khi được yêu cầu.
-   Chờ billing lock được gỡ, rerun GitHub sync và kiểm chứng GitLab pipeline đúng SHA/remote clone.
-2. Workflow/version API: dùng WorkflowSpec, limits trước parse, defaults snapshot/checksum,
-   handler payload schemas và immutable version tests.
-3. Runs/idempotency: bảng runs/tasks/dependencies và composite FK/CHECKs; kiểm tra pointer
-   run_input khi tạo run. 100 requests cùng key tạo một run, payload khác trả 409.
-4. Scheduler/outbox: atomic dispatch, DB polling, confirms/mandatory routing; same-generation redrive,
-   backlog >60s và broker outage không mất committed work.
-5. Worker/reliability: registry, claims/attempts, leases/heartbeat/hard deadlines, retries, fenced commits,
-   cancel races và real multi-worker/crash tests.
-6. Dashboard → observability → benchmark/release theo lịch bên dưới.
+1. Tích hợp PR cancellation trước, rồi review dashboard trên `main` sau khi hai pipeline GitLab cùng SHA xanh.
+2. Instrument API, Scheduler, Publisher và Worker với OpenTelemetry và metrics có nhãn cardinality thấp. Nghiệm thu trên luồng chạy thành công, retry và hủy.
+3. Đo benchmark 1.000 task trên môi trường được ghi rõ. Chốt README, video demo và release theo lịch bên dưới.
 
 ## Roadmap v2
 

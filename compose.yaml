@@ -106,6 +106,17 @@ services:
     depends_on:
       api:
         condition: service_healthy
+  dashboard-smoke:
+    profiles: [smoke]
+    image: ${COMPOSE_PROJECT_NAME:-flowforge}-dashboard-smoke:local
+    build:
+      context: .
+      dockerfile: tooling/Dockerfile.dashboard
+    network_mode: 'service:frontend'
+    init: true
+    shm_size: '256m'
+    cap_add: [SYS_ADMIN]
+    entrypoint: [node, dashboard-smoke.mjs]
 volumes:
   postgres-data:
   rabbitmq-data:
