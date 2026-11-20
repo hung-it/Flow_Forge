@@ -8,4 +8,6 @@ The lease lasts at most 30 seconds and heartbeat runs every 10 seconds using Pos
 
 Scheduler records an expired lease as LOST and a reached hard deadline as TASK_TIMEOUT. A retryable failure with attempts remaining transitions to RETRY_WAIT. Delay is the version snapshot's initial delay multiplied by the backoff factor for each prior attempt, capped at max delay. Scheduler promotes a due retry to READY and dispatches a fresh generation. Invalid bindings and invalid outputs are permanent. Exhausted attempts fail the task, and Scheduler continues eligible independent branches.
 
-Migration 0007 preserves queued tasks and outbox events. Downgrade drops worker metadata and refuses while RUNNING or RETRY_WAIT tasks exist. Use the downgrade rehearsal only in a disposable stack. Cancellation API and task-attempt read endpoints are future work.
+The [cancellation endpoint](runs.md#cancellation) invalidates active leases. A running handler receives a cooperative stop signal when heartbeat detects the lost lease. After a canceled or already completed delivery is requeued, the next consumer checks durable state and acknowledges it without running the handler again.
+
+Migration 0007 preserves queued tasks and outbox events. Downgrade drops worker metadata and refuses while RUNNING or RETRY_WAIT tasks exist. Use the downgrade rehearsal only in a disposable stack. The task-attempt read endpoint belongs to the dashboard milestone.

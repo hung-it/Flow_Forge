@@ -1,6 +1,6 @@
 # Kiến trúc FlowForge
 
-Đã triển khai Auth/Projects, workflow draft/version, Run/Task persistence, Scheduler/Outbox và Worker execution với lease fencing, retry và recovery. Giao diện hiện có màn hình kiểm tra kết nối. Run cancellation và dashboard thuộc các mốc sau.
+Đã triển khai Auth/Projects, workflow draft/version, Run/Task persistence, Scheduler/Outbox, Worker execution và run cancellation. Giao diện hiện có màn hình kiểm tra kết nối. Dashboard thuộc mốc sau.
 Nguồn chính: tài liệu trong repo và [progress plan v2](../../tasks/plan.md).
 Xem [execution contracts v1](execution-contracts.md) cho DAG, handler, transaction, broker và limits.
 
@@ -88,7 +88,7 @@ stateDiagram-v2
  RUNNING --> FAILED: permanent error or attempts exhausted
 ```
 
-Thiết kế cho mốc cancellation cho phép chuyển task chưa terminal sang CANCELED. Terminal không chuyển trạng thái.
+Cancellation chuyển task chưa terminal sang CANCELED. Terminal không chuyển trạng thái.
 Independent branches tiếp tục nếu một nhánh lỗi; descendants bị SKIPPED. Run hoàn tất khi tất cả task terminal.
 ```mermaid
 stateDiagram-v2
@@ -100,7 +100,7 @@ stateDiagram-v2
  RUNNING --> CANCELED: cancel and invalidate leases
 ```
 Attempt: RUNNING → SUCCEEDED / FAILED / LOST / CANCELED. Lease timeout ghi LOST; retry mới tạo attempt_no mới.
-Ở mốc cancellation, thao tác hủy sẽ khóa row run trước task, vô hiệu token và hủy task chưa terminal trong một transaction. Worker commit đã kiểm tra run và token theo cùng lock order. External side effects cần idempotency ở đích.
+Thao tác hủy khóa row run trước task, vô hiệu lease và hủy task chưa terminal trong một transaction. Worker commit kiểm tra run và token theo cùng lock order. External side effects cần idempotency ở đích.
 
 ## 6 Dispatch thành công
 
@@ -172,7 +172,7 @@ flowchart LR
 ## Contracts
 
 API prefix /api/v1; snake_case; UUID string; timestamps UTC; limit/offset default 20 max 100.
-Các route đã triển khai được liệt kê trong Swagger UI của API. Run cancellation và route xem attempt thuộc các mốc tiếp theo.
+Các route đã triển khai, gồm run cancellation, được liệt kê trong Swagger UI. Route xem attempt thuộc mốc dashboard.
 Run input: version (positive integer), input (JSON object). POST run returns 202 with run_id and status. Optional Idempotency-Key scoped to project: canonical hash includes workflow ID, explicit version and input; equal key/hash returns original run, different hash returns 409. Keys retained with run.
 Errors: code, message, details, request_id. Invalid input 422, unauthenticated 401, cross-project 404, insufficient role within visible project 403.
 Auth MVP: local bootstrap-user command, no public registration, Argon2 passwords; JWT access tokens expire in 30 minutes. OWNER manages membership/workflows/runs; DEVELOPER publishes and runs; VIEWER reads. Owner membership maintained atomically.

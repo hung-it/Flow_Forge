@@ -5,6 +5,7 @@ from uuid import UUID
 
 import httpx
 import pytest
+import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from test_workflows import example, resource, sign_in
@@ -14,6 +15,26 @@ from flowforge.api import create_app
 
 BODY = {"version": 1, "input": {"document": {"title": "FlowForge", "content": "Example"}}}
 KEY = "run-test-key"
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def cleanup_run_data(setup):
+    _, engine, _, _, owner, member = setup
+    try:
+        yield
+    finally:
+        # These API-only fixtures must not leave pending work for scheduler tests.
+        async with engine.begin() as conn:
+            params = {"owner": owner, "member": member}
+            for table in ("task_dependencies", "task_runs"):
+                await conn.execute(
+                    text(f"""DELETE FROM {table} t USING workflow_runs r
+                        WHERE t.run_id=r.id AND r.created_by IN (:owner,:member)"""),
+                    params,
+                )
+            await conn.execute(
+                text("DELETE FROM workflow_runs WHERE created_by IN (:owner,:member)"), params
+            )
 
 
 async def publish(client, auth, workflow, dag, revision=1):

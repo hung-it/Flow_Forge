@@ -6,7 +6,7 @@ FlowForge is a distributed workflow engine built with FastAPI, PostgreSQL and Ra
 
 - **Versioned workflows and scoped access.** Project roles control who can publish and run workflows. Each run uses an explicit, immutable version. Repeating a create-run request with the same idempotency key and input returns the original run. [Workflow API](docs/development/workflows.md) · [Run API](docs/development/runs.md)
 - **Durable dispatch.** The scheduler records ready work and its outbox event in one PostgreSQL transaction. A separate publisher sends persistent RabbitMQ messages and waits for broker confirmation. [Scheduler and outbox](docs/development/dispatch.md)
-- **Recovery and duplicate delivery.** Workers claim tasks with a lease, commit results only while the attempt token is valid, and acknowledge messages after commit. The scheduler recovers expired leases. [Worker execution](docs/development/worker.md)
+- **Recovery and cancellation.** Workers commit results with a valid lease before acknowledging messages. The scheduler recovers expired leases, and canceling a run fences active attempts and stops further dispatch. [Worker execution](docs/development/worker.md)
 
 ## Verification
 
@@ -70,4 +70,4 @@ Background processes run in Linux containers; native Windows signal handling is 
 
 One backend image runs four roles: API, scheduler, publisher and worker. PostgreSQL stores execution state, and RabbitMQ provides at-least-once delivery. Lease fencing protects database writes. External side effects require idempotency at the destination.
 
-The current milestone runs built-in demo handlers and exposes the workflow APIs. Run cancellation and the workflow dashboard are planned next. AWS, arbitrary user code and Kubernetes are outside the MVP.
+The current milestone runs built-in demo handlers and exposes workflow and run cancellation APIs. The workflow dashboard is next. AWS, arbitrary user code and Kubernetes are outside the MVP.

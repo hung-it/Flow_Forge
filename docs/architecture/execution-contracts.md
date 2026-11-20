@@ -42,8 +42,9 @@ Publisher owns outbox claims; workers own task claims, heartbeat and result comm
 Failure policy: continue independent branches; recursively SKIP not-started descendants of FAILED
 tasks. Run SUCCEEDED iff all tasks succeeded; FAILED once all terminal and any FAILED/SKIPPED.
 PENDING run becomes RUNNING at first dispatch. Terminal states never transition.
-Cancel locks run/tasks, sets CANCELED, cancels nonterminal tasks/attempts and invalidates leases
-atomically. No CANCELING state. Repeated cancel returns existing terminal run, including prior
+Cancel rechecks the session and project role before locking the run and tasks. It sets CANCELED,
+invalidates leases, and marks PENDING/CLAIMED outbox events OBSOLETE in one transaction.
+Repeated cancel returns the existing terminal run, including prior
 SUCCEEDED/FAILED. Racing completion uses the same run lock. Logical cancel is immediate;
 physical handler execution may continue. No compensation of external effects.
 
@@ -72,8 +73,8 @@ generation just because workers are busy. Original/redriven deliveries both cont
 Only a new attempt after retry/recovery changes generation. Before publish, recheck active run
 and current task/generation; mark obsolete events OBSOLETE. Crash after this check can still
 publish late, so consumer must revalidate. Broker outage retains DB events.
-Required future tests: backlog >60s; repeated redrive; races with cancel/claim; stale heartbeat/commit;
-max attempts after crash; fork/join never runs early. These engine tests are not implemented yet.
+Integration tests cover queued redrive, fork/join, cancellation races, stale worker writes and broker
+redelivery after worker death. The crash drills use a disposable PostgreSQL/RabbitMQ stack.
 
 ## Broker and delivery policy
 
