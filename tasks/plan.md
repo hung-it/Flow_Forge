@@ -1,6 +1,6 @@
 # FlowForge — Plan v2 và nhật ký tiến trình
 
-Cập nhật **2026-11-19** (Asia/Ho_Chi_Minh). File theo dõi chính sau mỗi buổi làm việc.
+Cập nhật **2026-11-20** (Asia/Ho_Chi_Minh). File theo dõi chính sau mỗi buổi làm việc.
 FlowForge **10 tuần**, tổng hai project **19 tuần**, 12–15 giờ/tuần.
 Tài liệu trong repo là nguồn duy trì; hai tài liệu ngoài repo là đề xuất v1.
 Xem [document authority](../docs/source-documents.md).
@@ -15,8 +15,16 @@ Scheduler/Outbox đã pass full Compose smoke local và hai job smoke GitLab t�
 Worker execution, lease fencing và retry đã pass full Compose smoke local và hai GitLab smoke
 tại `564237e`. Bản tích hợp `main` tại `a5d1331` xanh cả bốn job [GitLab](https://gitlab.com/hung-it/flow_forge/-/pipelines/3087574383).
 Run cancellation và các drill Worker đã nghiệm thu trên `feat/run-cancellation` tại `05d7e7c`.
-Dashboard workflow/run/attempt nằm trên `feat/dashboard`, dựa trên PR cancellation đang chờ tích hợp.
-Metrics/traces nằm trên `feat/observability`, dựa trên dashboard tại `7d1f8d7`.
+Cancellation, dashboard và observability đã tích hợp vào `main` theo thứ tự. [Pipeline tích hợp observability](https://gitlab.com/hung-it/flow_forge/-/pipelines/3092800202).
+Benchmark 1.000 task và video demo đã nghiệm thu. Evidence và các pipeline của bản phát hành được liên kết tại [v1.0.0](https://github.com/hung-it/Flow_Forge/releases/tag/v1.0.0).
+
+## Nhật ký 2026-11-20 — Nghiệm thu MVP và benchmark
+
+- Đã kiểm tra `main` sau mỗi lần merge. [Cancellation](https://gitlab.com/hung-it/flow_forge/-/pipelines/3092714507) · [Dashboard](https://gitlab.com/hung-it/flow_forge/-/pipelines/3092777547) · [Observability](https://gitlab.com/hung-it/flow_forge/-/pipelines/3092800202).
+- Dashboard đạt 141 smoke tests ở hai pipeline tại `7d1f8d7`. [Pipeline push](https://gitlab.com/hung-it/flow_forge/-/pipelines/3087808351) · [Pipeline thủ công](https://gitlab.com/hung-it/flow_forge/-/pipelines/3092756699).
+- Observability đạt 146 smoke tests ở hai pipeline tại `83c2a96`. Fresh clone từ GitHub đã pass `check.ps1` và Full Compose smoke trên Windows. Sửa launcher smoke để Python xuất UTF-8 khi terminal dùng CP1258. [Pipeline push](https://gitlab.com/hung-it/flow_forge/-/pipelines/3089037648) · [Pipeline thủ công](https://gitlab.com/hung-it/flow_forge/-/pipelines/3092757680).
+- Ba lượt baseline và một lượt dừng Worker đều hoàn tất đủ 1.000 task với bốn Worker. Median baseline 24,43 task/giây. Task mất Worker phục hồi sau 29,90 giây, với một attempt LOST và một attempt thành công. [Môi trường và phép đo](../docs/development/benchmark.md).
+- Video demo ghép từ các cảnh của stack chạy thật, cho thấy DAG, kết quả run, lịch sử phục hồi, Grafana và Jaeger. [Video demo](https://github.com/hung-it/Flow_Forge/releases/download/v1.0.0/flowforge-demo.mp4) · [Evidence benchmark](https://github.com/hung-it/Flow_Forge/releases/download/v1.0.0/flowforge-benchmark.zip).
 
 ## Nhật ký 2026-11-19 — Metrics và distributed tracing
 
@@ -229,9 +237,9 @@ Nhật ký bên dưới ghi kết quả trước restart; các trạng thái run
 
 ## Các bước tiếp theo theo thứ tự
 
-1. Tích hợp PR cancellation trước, rồi review dashboard trên `main` sau khi hai pipeline GitLab cùng SHA xanh.
-2. Nghiệm thu metrics/traces bằng Full Compose local và hai pipeline GitLab cùng commit. Tích hợp sau dashboard.
-3. Đo benchmark 1.000 task trên môi trường được ghi rõ. Chốt README, video demo và release theo lịch bên dưới.
+1. Đối chiếu SHA của `v1.0.0` với `main` và xem kết quả GitLab của tag. [Pipeline của tag](https://gitlab.com/hung-it/flow_forge/-/pipelines?ref=v1.0.0).
+2. Dùng [release](https://github.com/hung-it/Flow_Forge/releases/tag/v1.0.0) và [báo cáo benchmark](../docs/development/benchmark.md) làm evidence portfolio.
+3. Bắt đầu API Contract Guardian theo roadmap tổng sau khi hoàn tất FlowForge MVP.
 
 ## Roadmap v2
 

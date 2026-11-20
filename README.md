@@ -2,6 +2,8 @@
 
 FlowForge is a distributed workflow engine built with FastAPI, PostgreSQL and RabbitMQ. Define a workflow as a JSON DAG, publish an immutable version, then run it with workers that retry eligible failures and recover expired leases.
 
+[v1.0.0 release](https://github.com/hung-it/Flow_Forge/releases/tag/v1.0.0) · [Demo video](https://github.com/hung-it/Flow_Forge/releases/download/v1.0.0/flowforge-demo.mp4) · [Benchmark results](docs/development/benchmark.md)
+
 ## What it demonstrates
 
 - **Versioned workflows and scoped access.** Project roles control who can publish and run workflows. Each run uses an explicit, immutable version. Repeating a create-run request with the same idempotency key and input returns the original run. [Workflow API](docs/development/workflows.md) · [Run API](docs/development/runs.md)
@@ -12,7 +14,9 @@ FlowForge is a distributed workflow engine built with FastAPI, PostgreSQL and Ra
 
 ## Verification
 
-The dashboard milestone passed **141 tests** in GitLab with PostgreSQL and RabbitMQ. The current Compose smoke covers browser and HTTP flows, database and broker recovery, migration compatibility, Prometheus queries and trace relationships in Jaeger. [Dashboard pipeline](https://gitlab.com/hung-it/flow_forge/-/pipelines/3087808351) · [Verification notes](docs/development/verification.md)
+The integrated engine passed **146 smoke tests** in GitLab with real PostgreSQL and RabbitMQ. The smoke checks cover HTTP and browser flows, migration compatibility, database and broker recovery, Prometheus queries and end-to-end trace relationships in Jaeger. [Integrated pipeline](https://gitlab.com/hung-it/flow_forge/-/pipelines/3092800202) · [Release pipeline](https://gitlab.com/hung-it/flow_forge/-/pipelines?ref=v1.0.0) · [Verification notes](docs/development/verification.md)
+
+A Windows Docker Desktop benchmark completed **1,000 tasks per trial** with four Workers. Median baseline throughput was **24.43 tasks/s**. In the fault trial, a task whose Worker was killed before commit recovered in **29.90 s**. [Method and measurements](docs/development/benchmark.md) · [Raw benchmark evidence](https://github.com/hung-it/Flow_Forge/releases/download/v1.0.0/flowforge-benchmark.zip)
 
 Run `./scripts/smoke.ps1` to reproduce the end-to-end checks in a temporary Compose project. The [sample document workflow](examples/document-workflow.json) shows parallel metadata extraction and content analysis joined into a single report. Run `./scripts/check.ps1` for lint, type checks, unit tests, dependency audits and diagrams.
 
@@ -79,4 +83,4 @@ Background processes run in Linux containers; native Windows signal handling is 
 
 One backend image runs four roles: API, scheduler, publisher and worker. PostgreSQL stores execution state, and RabbitMQ provides at-least-once delivery. Lease fencing protects database writes. External side effects require idempotency at the destination.
 
-The current milestone runs built-in demo handlers through the dashboard and API. AWS, arbitrary user code and Kubernetes are outside the MVP.
+The MVP runs built-in demo handlers through the dashboard and API. AWS, arbitrary user code and Kubernetes are outside the MVP.
