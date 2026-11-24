@@ -1,11 +1,24 @@
 stages: [check, smoke]
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "integration/guardian"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(feat|demo)\/guardian-/ && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_COMMIT_BRANCH || $CI_COMMIT_TAG'
+
+.check_rules: &check_rules
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH || $CI_COMMIT_TAG'
+
 backend:
+  <<: *check_rules
   stage: check
   image: ghcr.io/astral-sh/uv:0.11.0-python3.12-trixie-slim
   script:
     - cd backend
     - uv sync --frozen
-    - uv run ruff check . ../scripts/verify_stack.py
+    - uv run ruff check . ../scripts/verify_stack.py ../scripts/export_openapi.py
     - uv run mypy
     - uv run pytest --junitxml=../reports/junit.xml --cov=flowforge.contracts --cov-report=xml:../reports/coverage.xml --cov-fail-under=80
     - uv export --quiet --frozen --no-emit-project --format requirements-txt --output-file ../reports/requirements-audit.txt
@@ -18,6 +31,7 @@ backend:
         coverage_format: cobertura
         path: reports/coverage.xml
 frontend:
+  <<: *check_rules
   stage: check
   image: node:24.11.0-alpine
   script:
@@ -28,6 +42,7 @@ frontend:
     - npm run build
     - npm audit --audit-level=high
 smoke:
+  <<: *check_rules
   stage: smoke
   needs:
     - job: backend
@@ -147,6 +162,7 @@ smoke:
     reports:
       junit: reports/integration.xml
 diagrams:
+  <<: *check_rules
   stage: check
   image: node:24.11.0-bookworm
   script:
@@ -159,3 +175,20 @@ diagrams:
   artifacts:
     expire_in: 7 days
     paths: [reports/]
+
+openapi_sync:
+  <<: *check_rules
+  stage: check
+  image: ghcr.io/astral-sh/uv:0.11.0-python3.12-trixie-slim
+  script:
+    - cd backend
+    - uv sync --frozen --no-dev
+    - uv run --frozen --no-dev python ../scripts/export_openapi.py ../reports/openapi/flowforge.json
+    - |
+      if ! cmp -s ../openapi/flowforge.json ../reports/openapi/flowforge.json; then
+        echo 'OpenAPI snapshot is stale. From backend run uv run --frozen python ../scripts/export_openapi.py ../openapi/flowforge.json.' >&2
+        exit 1
+      fi
+  artifacts:
+    when: always
+    paths: [reports/openapi/flowforge.json]

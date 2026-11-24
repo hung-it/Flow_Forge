@@ -1,0 +1,4 @@
+version: 1
+compatibility:
+  fail_on: [ERR]
+  fail_on_unknown: true
