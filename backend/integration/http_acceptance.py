@@ -7,7 +7,6 @@ import secrets
 import urllib.error
 import urllib.request
 from pathlib import Path
-from uuid import UUID
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -112,7 +111,6 @@ def main() -> None:
     run_path = "/runs/" + created["run_id"]
     status, metadata = call(member, "GET", run_path, token=member_token)
     assert status == 200 and metadata["workflow_version_id"] == version["id"]
-    assert metadata["run_id"] == UUID(created["run_id"]).int
     status, tasks = call(member, "GET", run_path + "/tasks", token=member_token)
     assert status == 200 and len(tasks) == 5
     assert all(task["status"] == "PENDING" and task["attempt_count"] == 0 for task in tasks)
@@ -125,10 +123,7 @@ def main() -> None:
     assert status == 200 and canceled["status"] == "CANCELED"
     assert canceled["started_at"] is None and canceled["finished_at"] is not None
     assert call(owner, "POST", cancel_path, token=token) == (200, canceled)
-    assert call(member, "GET", run_path, token=member_token) == (
-        200,
-        {**canceled, "run_id": UUID(created["run_id"]).int},
-    )
+    assert call(member, "GET", run_path, token=member_token) == (200, canceled)
     status, canceled_tasks = call(member, "GET", run_path + "/tasks", token=member_token)
     expected_tasks = [{**task, "status": "CANCELED"} for task in tasks]
     assert status == 200 and canceled_tasks == expected_tasks

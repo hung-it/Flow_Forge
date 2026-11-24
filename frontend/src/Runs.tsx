@@ -87,8 +87,7 @@ function useRunDetails(project: string, id: string, selected: string | undefined
       if (signal.aborted || document.hidden || running || !polling) return;
       running = true;
       try {
-        const response = await api<Omit<Run, "run_id"> & { run_id: number }>("/runs/" + id, { signal });
-        const run: Run = { ...response, run_id: id };
+        const run = await api<Run>("/runs/" + id, { signal });
         if (run.project_id !== project) {
           throw new ApiError(404, "NOT_FOUND", "Run not found in this project.", null, null);
         }
