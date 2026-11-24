@@ -192,3 +192,22 @@ openapi_sync:
   artifacts:
     when: always
     paths: [reports/openapi/flowforge.json]
+
+api_contract_guard:
+  stage: check
+  image:
+    name: registry.gitlab.com/hung-it/api_contract_guardian/guardian-cli@sha256:30d3f9ac53c5a2326e0b4aca3fee046ca708033a0e8a8f74026967af6a9a691d
+    entrypoint: [""]
+  variables:
+    GIT_STRATEGY: clone
+  needs:
+    - job: openapi_sync
+      artifacts: true
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE == "detached" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID == $CI_PROJECT_ID && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "integration/guardian"'
+  script:
+    - sh scripts/check-api-contract.sh
+  artifacts:
+    when: always
+    paths: [reports/guardian/]
+    expire_in: 14 days
