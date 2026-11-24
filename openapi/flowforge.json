@@ -360,6 +360,92 @@
         "title": "RunAccepted",
         "type": "object"
       },
+      "RunDetailOutput": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "integer"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "RUNNING",
+              "SUCCEEDED",
+              "FAILED",
+              "CANCELED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "workflow_id": {
+            "format": "uuid",
+            "title": "Workflow Id",
+            "type": "string"
+          },
+          "workflow_version_id": {
+            "format": "uuid",
+            "title": "Workflow Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "status",
+          "project_id",
+          "workflow_id",
+          "workflow_version_id",
+          "version",
+          "created_by",
+          "created_at",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "RunDetailOutput",
+        "type": "object"
+      },
       "RunInput": {
         "additionalProperties": false,
         "properties": {
@@ -1829,7 +1915,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunOutput"
+                  "$ref": "#/components/schemas/RunDetailOutput"
                 }
               }
             },

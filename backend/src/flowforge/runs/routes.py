@@ -4,7 +4,7 @@ from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Header, Request, Response
-from pydantic import BaseModel, Field, JsonValue
+from pydantic import BaseModel, Field, JsonValue, field_serializer
 
 from flowforge import observability as obs
 from flowforge.auth.routes import CurrentUser
@@ -49,6 +49,12 @@ class RunOutput(RunAccepted):
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+
+
+class RunDetailOutput(RunOutput):
+    @field_serializer("run_id", when_used="json")
+    def serialize_run_id(self, value: UUID) -> int:
+        return value.int
 
 
 class TaskOutput(BaseModel):
@@ -127,7 +133,7 @@ async def listing(
     )
 
 
-@router.get("/runs/{run_id}", response_model=RunOutput)
+@router.get("/runs/{run_id}", response_model=RunDetailOutput)
 async def detail(run_id: UUID, request: Request, actor: CurrentUser) -> dict[str, Any]:
     return await service.detail(request.app.state.engine, actor, run_id)
 
