@@ -28,6 +28,11 @@ def main():
         if line and not line.startswith("#"):
             key, value = line.split("=", 1)
             env[key] = value
+    origins = json.loads(env["FLOWFORGE_ALLOWED_ORIGINS"])
+    origins.extend(f"http://{host}:{env[port]}"
+                   for host in ("localhost", "127.0.0.1")
+                   for port in ("API_PORT", "WEB_PORT"))
+    env["FLOWFORGE_ALLOWED_ORIGINS"] = json.dumps(origins)
     env["FLOWFORGE_JWT_SECRET"] = secrets.token_urlsafe(48)
     env["FLOWFORGE_GRAFANA_ADMIN_PASSWORD"] = secrets.token_urlsafe(32)
     env["GRAFANA_PORT"] = free_port()
@@ -71,8 +76,20 @@ def main():
 
     def dashboard(phase):
         accounts = compose("exec", "-T", "api", "python", "integration/dashboard_accounts.py")
+        account_json = accounts.splitlines()[-1]
+        if phase == "full":
+            origin = f"http://127.0.0.1:{env['WEB_PORT']}"
+            login = urllib.request.Request(
+                origin + "/api/v1/auth/login",
+                data=json.dumps(json.loads(account_json)["owner"]).encode(),
+                headers={"Origin": origin, "Content-Type": "application/json",
+                         "X-FlowForge-CSRF": "1"},
+            )
+            with urllib.request.urlopen(login, timeout=10) as response:
+                assert response.status == 200 and json.load(response)["access_token"]
+            print("PASS: sign-in through the dashboard's custom host port", flush=True)
         output = compose("run", "--rm", "--no-deps", "-T", "dashboard-smoke", phase,
-                         input_text=accounts.splitlines()[-1])
+                         input_text=account_json)
         with (reports / "dashboard-smoke.log").open("a", encoding="utf-8") as log:
             log.write(output)
         print(output, flush=True)

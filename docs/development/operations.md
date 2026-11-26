@@ -25,7 +25,17 @@ Không có credential/project URL thì chỉ nghiệm thu cấu hình local, ch�
 Artifacts lưu 7 ngày; không mua compute thêm trong kế hoạch. Hosted quota hết: dừng remote jobs, dùng local checks hoặc cấu hình runner riêng.
 
 ## Troubleshooting
-- Port 8000/5173 bận: set API_PORT/WEB_PORT trong .env.
+- Nếu cổng 8000 hoặc 5173 đang bận, đặt `API_PORT` và `WEB_PORT` trong `.env` rồi cập nhật
+  `FLOWFORGE_ALLOWED_ORIGINS` theo các địa chỉ mở trên trình duyệt. Ví dụ với API ở cổng 18000
+  và dashboard ở cổng 15173:
+
+  ```dotenv
+  API_PORT=18000
+  WEB_PORT=15173
+  FLOWFORGE_ALLOWED_ORIGINS=["http://localhost:18000","http://localhost:15173","http://127.0.0.1:18000","http://127.0.0.1:15173"]
+  ```
+
+  Chạy lại `docker compose up -d --wait` để nạp cấu hình.
 - Readiness 503: xem docker compose logs migrate api postgres. DB phải có alembic head.
 - Broker outage: API vẫn live/ready nếu DB tốt; worker/publisher log unavailable và tự probe lại.
 - Scheduler probe chỉ cần DB; worker/publisher probe cần cả DB và broker.
