@@ -1,3 +1,7 @@
+import { clearRunIntents } from "./runIntent";
+
+type ApiErrorDetail = { loc: (string | number)[]; message: string };
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -5,6 +9,7 @@ export class ApiError extends Error {
     message: string,
     public readonly requestId: string | null,
     public readonly retryAfter: string | null,
+    public readonly details: ApiErrorDetail[] = [],
   ) {
     super(message);
   }
@@ -34,6 +39,8 @@ export function subscribe(listener: () => void) {
 }
 
 function publish(next: Session) {
+  if (next.phase === "guest") clearRunIntents();
+  if (next.phase === "ready") clearRunIntents(next.user.id);
   session = next;
   for (const listener of subscribers) listener();
 }
@@ -76,10 +83,12 @@ async function send<T>(path: string, init: RequestInit = {}, access?: string | n
     ...init, headers, signal, credentials: "same-origin", cache: "no-store",
   });
   if (!response.ok) {
-    const payload = await response.json().catch(() => null) as { code?: string; message?: string } | null;
+    const payload = await response.json().catch(() => null) as {
+      code?: string; message?: string; details?: ApiErrorDetail[];
+    } | null;
     throw new ApiError(response.status, payload?.code ?? "HTTP_ERROR",
       payload?.message ?? "Request failed.", response.headers.get("X-Request-ID"),
-      response.headers.get("Retry-After"));
+      response.headers.get("Retry-After"), Array.isArray(payload?.details) ? payload.details : []);
   }
   return response.status === 204 ? undefined as T : response.json() as Promise<T>;
 }

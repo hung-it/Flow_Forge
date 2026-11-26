@@ -48,7 +48,7 @@ export function Projects() {
     {!result && <Notice>Loading projects…</Notice>}
     {result?.data && <>
       {result.data.length ? <ul className="project-grid">
-        {result.data.map(project => <li key={project.id}>
+        {result.data.slice(0, pageSize).map(project => <li key={project.id}>
           <a className="project-tile" href={projectPath(project.id)}>
             <span className="tile-icon" aria-hidden="true">{project.name.slice(0, 1).toUpperCase()}</span>
             <strong>{project.name}</strong><Badge value={project.role} />
@@ -122,7 +122,7 @@ function MemberSettings({ project }: { project: Project }) {
       {result?.data && <>
         <div className="table-scroll"><table>
           <thead><tr><th scope="col">Email</th><th scope="col">Role</th><th scope="col">Actions</th></tr></thead>
-          <tbody>{result.data.map(member => <tr key={member.user_id}>
+          <tbody>{result.data.slice(0, pageSize).map(member => <tr key={member.user_id}>
             <td>{member.email}</td>
             <td>{member.role === "OWNER" ? <Badge value={member.role} /> :
               <select aria-label={"Role for " + member.email} disabled={busy} value={member.role}

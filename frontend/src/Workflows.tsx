@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { api, ApiError, errorText, json, jsonObject, uncertain } from "./api";
+import { api, ApiError, errorText, isAbort, json, jsonObject, uncertain } from "./api";
 import { DagView } from "./DagView";
 import { CreateName } from "./Projects";
+import { forgetRunIntent, readRunIntent, runIntentKey, saveRunIntent } from "./runIntent";
 import type { Draft, Project, Published, Version, Workflow } from "./types";
-import { Badge, date, listPath, Notice, Pager, PageTitle, projectPath, useLoad } from "./ui";
+import { Badge, date, listPath, Notice, Pager, pageSize, PageTitle, projectPath, useLoad } from "./ui";
 
 export function Workflows({ project }: { project: Project }) {
   const [search, setSearch] = useState("");
@@ -35,7 +36,7 @@ export function Workflows({ project }: { project: Project }) {
       {result?.data && <>
         {result.data.length ? <div className="table-scroll"><table>
           <thead><tr><th scope="col">Name</th><th scope="col">Status</th><th scope="col">Latest version</th></tr></thead>
-          <tbody>{result.data.map(workflow => <tr key={workflow.id}>
+          <tbody>{result.data.slice(0, pageSize).map(workflow => <tr key={workflow.id}>
             <td><a href={href + workflow.id}>{workflow.name}</a></td>
             <td><Badge value={workflow.latest_version ? "Published" : "Draft"} /></td>
             <td>{workflow.latest_version ?? "—"}</td>
@@ -47,7 +48,7 @@ export function Workflows({ project }: { project: Project }) {
   </>;
 }
 
-export function WorkflowDetails({ project, id }: { project: Project; id: string }) {
+export function WorkflowDetails({ project, id, userId }: { project: Project; id: string; userId: string }) {
   const [history, setHistory] = useState(0);
   const [offset, setOffset] = useState(0);
   const [picked, setPicked] = useState<number>();
@@ -83,7 +84,7 @@ export function WorkflowDetails({ project, id }: { project: Project; id: string 
         {versions.data.length ? <div className="table-scroll"><table>
           <thead><tr><th scope="col">Version</th><th scope="col">Draft revision</th>
             <th scope="col">Published</th><th scope="col">Action</th></tr></thead>
-          <tbody>{versions.data.map(version => <tr key={version.version}>
+          <tbody>{versions.data.slice(0, pageSize).map(version => <tr key={version.version}>
             <td>v{version.version}</td><td>{version.source_draft_revision}</td>
             <td>{date(version.created_at)}</td>
             <td><button className="text-button" aria-pressed={selected === version.version}
@@ -95,7 +96,8 @@ export function WorkflowDetails({ project, id }: { project: Project; id: string 
     </section>
     {selected !== null && <section className="panel">
       <PublishedPreview path={path} version={selected} />
-      {canEdit && <RunForm path={path} version={selected} projectHref={projectHref} />}
+      {canEdit && <RunForm path={path} version={selected} projectHref={projectHref}
+        storageKey={runIntentKey(userId, project.id, id)} />}
     </section>}
   </>;
 }
@@ -108,6 +110,8 @@ function PublishedPreview({ path, version }: { path: string; version: number }) 
     {result?.data && <DagView dag={result.data.dag} />}
   </>;
 }
+
+const publishUnconfirmed = "Publish outcome is unknown. Check version history before publishing again.";
 
 function DraftEditor({ path, draft, canEdit, refreshHistory }: {
   path: string; draft: Draft; canEdit: boolean; refreshHistory: (version?: number) => void;
@@ -158,7 +162,14 @@ function DraftEditor({ path, draft, canEdit, refreshHistory }: {
         setError("The draft changed elsewhere. Load the current revision to continue.");
       } else if (action === "publish" && uncertain(problem)) {
         setUnknownPublish(true);
-        setError("Publish outcome is unknown. Check version history before publishing again.");
+        setError(publishUnconfirmed);
+      } else if (problem instanceof ApiError && problem.code === "WORKFLOW_INVALID") {
+        const details = problem.details.filter(detail =>
+          detail && Array.isArray(detail.loc) && typeof detail.message === "string",
+        );
+        setError([errorText(problem) + ".", ...details.map(detail =>
+          detail.message + " (" + detail.loc.join(".") + ").",
+        )].join(" "));
       } else {
         setError(errorText(problem));
       }
@@ -183,43 +194,73 @@ function DraftEditor({ path, draft, canEdit, refreshHistory }: {
     </div>}
     {canEdit && dirty && <details><summary>Compare with saved JSON</summary><pre>{saved.text}</pre>
       <button className="secondary" disabled={busy || conflict}
-        onClick={() => setEditor(saved.text)}>Use saved JSON</button>
+        onClick={() => {
+          setEditor(saved.text);
+          setError(unknownPublish ? publishUnconfirmed : "");
+          setMessage("");
+        }}>Use saved JSON</button>
     </details>}
     <Notice error>{error}</Notice><Notice>{message}</Notice>
   </>;
 }
 
-type RunIntent = { key: string; body: string; version: number };
+const runUnconfirmed = "Run creation could not be confirmed. Retry the same request to recover its result.";
 
-function RunForm({ path, version, projectHref }: {
-  path: string; version: number; projectHref: string;
+function RunForm({ path, version, projectHref, storageKey }: {
+  path: string; version: number; projectHref: string; storageKey: string;
 }) {
-  const [input, setInput] = useState("{}");
-  const [pending, setPending] = useState<RunIntent>();
+  const [pending, setPending] = useState(() => readRunIntent(storageKey));
+  const [input, setInput] = useState(() => pending?.input ?? "{}");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const mounted = useRef(false);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
     setBusy(true);
     setError("");
-    let intent = pending;
+    let intent = readRunIntent(storageKey) ?? pending;
+    const retry = Boolean(intent);
     try {
-      intent ??= {
-        key: crypto.randomUUID(), version, body: JSON.stringify({ version, input: jsonObject(input) }),
-      };
+      if (!intent) {
+        const next = {
+          key: crypto.randomUUID(), version, input,
+          body: JSON.stringify({ version, input: jsonObject(input) }),
+        };
+        if (!saveRunIntent(storageKey, next)) {
+          setError("This tab could not save the run request for retry. Check browser storage and try again.");
+          return;
+        }
+        intent = next;
+        setPending(intent);
+      }
       const run = await api<{ run_id: string }>(path + "/runs", {
         method: "POST", body: intent.body, headers: { "Idempotency-Key": intent.key },
       });
+      if (typeof run?.run_id !== "string" || !run.run_id) throw new Error(runUnconfirmed);
+      forgetRunIntent(storageKey, intent.key);
       setPending(undefined);
-      window.location.hash = projectHref + "/runs/" + run.run_id;
+      if (mounted.current) window.location.hash = projectHref + "/runs/" + run.run_id;
     } catch (problem) {
-      if (intent && uncertain(problem)) {
-        setPending(intent);
-        setError("Run creation could not be confirmed. Retry the same request to recover its result.");
-      } else {
-        setError(errorText(problem));
+      const rejected = problem instanceof ApiError && (
+        [400, 409, 413, 415, 422].includes(problem.status) ||
+        (!retry && [401, 403, 404, 429].includes(problem.status))
+      );
+      if (intent && rejected) {
+        forgetRunIntent(storageKey, intent.key);
+        setPending(undefined);
+      }
+      if (!isAbort(problem)) {
+        const message = errorText(problem);
+        setError(intent && !rejected
+          ? runUnconfirmed + (problem instanceof ApiError ? " " + message : "")
+          : message);
       }
     } finally {
       setBusy(false);
@@ -237,5 +278,6 @@ function RunForm({ path, version, projectHref }: {
       {pending && <a href={projectHref + "/runs"}>Check run history</a>}
     </div>
     <Notice error>{error}</Notice>
+    {pending && !busy && !error && <Notice>{runUnconfirmed}</Notice>}
   </form>;
 }

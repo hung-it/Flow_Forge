@@ -93,6 +93,34 @@ async def test_workflow_lifecycle(setup):
                 await conn.execute(text(sql), {"id": versions[0]["id"]})
 
 
+@pytest.mark.parametrize("invalid", ["cycle", "binding"])
+async def test_publish_returns_actionable_validation_details(setup, invalid):
+    client, _, first, *_ = setup
+    auth, _, path = await resource(client, first)
+    dag = example()
+    if invalid == "cycle":
+        dag["edges"].append(["report", "validate"])
+        location, message = ["dag"], "cycle"
+    else:
+        dag["nodes"][0]["inputs"] = {}
+        location, message = ["dag", "nodes", 0, "inputs"], "binding names"
+    draft = await client.put(
+        path + "/draft", headers=auth, json={"expected_revision": 1, "dag": dag}
+    )
+    assert draft.status_code == 200
+    response = await client.post(
+        path + "/versions", headers=auth, json={"draft_revision": draft.json()["revision"]}
+    )
+    assert response.status_code == 422
+    failure = response.json()
+    assert failure["code"] == "WORKFLOW_INVALID"
+    detail, = failure["details"]
+    assert detail["loc"] == location
+    assert message in detail["message"]
+    assert set(detail) == {"loc", "type", "message"}
+    assert (await client.get(path + "/versions", headers=auth)).json() == []
+
+
 async def test_workflow_rbac(setup):
     client, _, first, second, *_ = setup
     auth, root, path = await resource(client, first)

@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, ApiError, errorText, isAbort, json } from "./api";
 import { DagView } from "./DagView";
 import { active } from "./types";
 import type { Attempt, Project, Published, Run, Task, Workflow } from "./types";
-import { Badge, Confirm, date, listPath, Notice, Pager, PageTitle, projectPath, useLoad } from "./ui";
+import { Badge, Confirm, date, listPath, Notice, Pager, pageSize, PageTitle, projectPath, useLoad } from "./ui";
 
 export function Runs({ project, initialWorkflow }: { project: Project; initialWorkflow: string }) {
   const [workflow, setWorkflow] = useState(initialWorkflow);
@@ -55,7 +55,7 @@ export function Runs({ project, initialWorkflow }: { project: Project; initialWo
         {result.data.length ? <div className="table-scroll"><table>
           <thead><tr><th scope="col">Run</th><th scope="col">Workflow</th><th scope="col">Version</th>
             <th scope="col">Status</th><th scope="col">Created</th></tr></thead>
-          <tbody>{result.data.map(run => <tr key={run.run_id}>
+          <tbody>{result.data.slice(0, pageSize).map(run => <tr key={run.run_id}>
             <td><a className="mono" href={projectPath(project.id) + "/runs/" + run.run_id}>
               {run.run_id.slice(0, 8)}
             </a></td>
@@ -131,8 +131,14 @@ function useRunDetails(project: string, id: string, selected: string | undefined
   return state;
 }
 
+function revealAttempts(heading: HTMLHeadingElement | null) {
+  heading?.focus({ preventScroll: true });
+  heading?.scrollIntoView({ block: "center" });
+}
+
 export function RunDetails({ id, project, userId }: { id: string; project: Project; userId: string }) {
   const [selected, setSelected] = useState<string>();
+  const attemptHeading = useRef<HTMLHeadingElement>(null);
   const [refresh, setRefresh] = useState(0);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -143,6 +149,10 @@ export function RunDetails({ id, project, userId }: { id: string; project: Proje
   const tasks = detail.tasks ?? [];
   const task = tasks.find(item => item.task_id === selected);
   const names = new Map(tasks.map(item => [item.task_id, item.node_key]));
+
+  useEffect(() => {
+    revealAttempts(attemptHeading.current);
+  }, [selected]);
 
   if (!run) return <Notice error={Boolean(detail.error)}>{detail.error ?? "Loading run…"}</Notice>;
   const canCancel = active(run) &&
@@ -193,14 +203,19 @@ export function RunDetails({ id, project, userId }: { id: string; project: Proje
           <td>{item.node_key}</td><td><Badge value={item.status} /></td>
           <td>{item.predecessor_task_ids.map(value => names.get(value) ?? value).join(", ") || "—"}</td>
           <td><button className="text-button" aria-label={"Attempts for " + item.node_key}
-            aria-pressed={selected === item.task_id} onClick={() => setSelected(item.task_id)}>
-            {item.attempt_count} attempts
+            aria-pressed={selected === item.task_id}
+            aria-controls={selected === item.task_id ? "attempt-history" : undefined}
+            onClick={() => {
+              if (selected === item.task_id) revealAttempts(attemptHeading.current);
+              else setSelected(item.task_id);
+            }}>
+            {item.attempt_count} {item.attempt_count === 1 ? "attempt" : "attempts"}
           </button></td>
         </tr>)}</tbody>
       </table></div>
     </section>
-    {task && <section className="panel">
-      <h2>Attempts · {task.node_key}</h2>
+    {task && <section className="panel" id="attempt-history" aria-labelledby="attempt-history-heading">
+      <h2 id="attempt-history-heading" ref={attemptHeading} tabIndex={-1}>Attempts · {task.node_key}</h2>
       {detail.attemptTask === selected && detail.attempts ?
         <Attempts attempts={detail.attempts} /> : <Notice>Loading attempts…</Notice>}
     </section>}

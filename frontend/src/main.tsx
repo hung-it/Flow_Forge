@@ -75,7 +75,7 @@ function ProjectArea({ id, view, resource, workflow, user }: {
   id: string; view: string; resource?: string; workflow: string; user: User;
 }) {
   const [refresh, setRefresh] = useState(0);
-  const result = useLoad<Project>("/projects/" + id, refresh);
+  const result = useLoad<Project>("/projects/" + id, refresh, true);
   const project = result?.data;
   if (!project) return <main id="dashboard-content" className="main-area alone">
     <Notice error={Boolean(result?.error)}>{result?.error ?? "Loading project…"}</Notice>
@@ -94,14 +94,16 @@ function ProjectArea({ id, view, resource, workflow, user }: {
         {project.role === "OWNER" && <a href={href + "/members"}
           aria-current={view === "members" ? "page" : undefined}>Members</a>}
       </nav>
-      <button className="text-button refresh-access" onClick={() => setRefresh(value => value + 1)}>Refresh access</button>
+      <button className="text-button refresh-access" disabled={result?.refreshing}
+        onClick={() => setRefresh(value => value + 1)}>Refresh access</button>
     </aside>
     <main id="dashboard-content" className="main-area">
       <p className="breadcrumb"><a href="#/">Projects</a><span>/</span>{project.name}</p>
+      <Notice error>{result?.error}</Notice>
       {view === "members" ? <Members project={project} /> :
         view === "runs" ? (resource ? <RunDetails key={resource} id={resource} project={project} userId={user.id} />
           : <Runs key={workflow} project={project} initialWorkflow={workflow} />) :
-        resource ? <WorkflowDetails key={resource} project={project} id={resource} /> :
+        resource ? <WorkflowDetails key={resource} project={project} id={resource} userId={user.id} /> :
           <Workflows project={project} />}
     </main>
   </div>;

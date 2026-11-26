@@ -25,6 +25,10 @@ Supply one optional `Idempotency-Key` header with 1–128 case-sensitive charact
 - Reuse of the key with a different valid request returns `409 IDEMPOTENCY_KEY_CONFLICT`. The SHA-256 fingerprint covers workflow ID, version and parsed input in compact UTF-8 JSON with sorted object keys and original array order. Integer and floating-point values such as `1` and `1.0` produce different fingerprints.
 - Validation and authorization precede replay. Invalid requests and rolled-back inserts leave the key available. A request without the header creates a fresh run. Reuse the same key after an uncertain transport outcome to recover the committed result.
 
+The dashboard keeps a pending run request's key and body in the current tab's session storage.
+Opening run history or reloading the tab preserves the request for **Retry run request**.
+The dashboard removes the record when the outcome is confirmed or the tab signs out.
+
 ## Cancellation
 
 An OWNER can cancel any run in the project. A DEVELOPER can cancel runs they created. A VIEWER or a DEVELOPER targeting another member's run receives `403`. An unknown run or a run outside the caller's visible projects returns `404`.

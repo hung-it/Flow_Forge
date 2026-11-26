@@ -58,13 +58,19 @@ CATALOG: dict[str, tuple[type[Contract], type[Contract]]] = {
 }
 
 
+class InvalidHandlerBindings(ValueError):
+    def __init__(self, node_index: int) -> None:
+        super().__init__("Handler binding names must match required inputs")
+        self.node_index = node_index
+
+
 def snapshot(raw: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], str]:
     spec = WorkflowSpec.model_validate(raw)
     contracts: dict[str, Any] = {}
-    for node in spec.nodes:
+    for index, node in enumerate(spec.nodes):
         inputs, output = CATALOG[node.handler]
         if set(node.inputs) != set(inputs.model_fields):
-            raise ValueError("Handler binding names must match required inputs")
+            raise InvalidHandlerBindings(index)
         contracts[node.handler] = {
             "version": 1,
             "input": inputs.model_json_schema(),

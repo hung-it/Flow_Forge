@@ -164,7 +164,7 @@ def create_app() -> FastAPI:
             dict(
                 code=error.code,
                 message=error.message,
-                details=[],
+                details=error.details,
                 request_id=request.state.request_id,
             ),
             status_code=error.status,

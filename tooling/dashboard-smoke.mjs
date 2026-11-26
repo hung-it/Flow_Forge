@@ -95,8 +95,82 @@ async function publish(page, version) {
 }
 
 async function start(page) {
+  await page.waitForSelector(".dag-node");
   await editJson(page, "#run-input-json", JSON.stringify(input));
   await button(page, "Start run").click();
+}
+
+async function openAttempts(page, node) {
+  await button(page, "Attempts for " + node).click();
+  await page.waitForFunction(key => {
+    const heading = document.activeElement;
+    if (heading?.textContent !== "Attempts · " + key) return false;
+    const rect = heading.getBoundingClientRect();
+    return rect.top >= 0 && rect.bottom <= innerHeight;
+  }, {}, node);
+}
+
+async function checkAccessRefresh(page, ownerContext, home, workflow) {
+  const membership = await open(ownerContext);
+  const memberContext = await browser.createBrowserContext();
+  try {
+    const member = await open(memberContext);
+    await membership.goto(origin + "/" + home + "/members");
+    await login(member, accounts.developer, workflow);
+    await member.bringToFront();
+    const unsaved = JSON.stringify({ ...example, name: "Unsaved edits after access refresh" });
+    await editJson(member, "#workflow-json", unsaved);
+    const refresh = async () => {
+      const response = member.waitForResponse(item =>
+        item.request().method() === "GET" && item.url().endsWith("/api/v1" + home.slice(1)),
+      );
+      await button(member, "Refresh access").click();
+      assert.equal((await response).status(), 200);
+      await member.waitForSelector(".refresh-access:not(:disabled)");
+      assert.equal(await member.$eval("#workflow-json", input => input.value), unsaved);
+    };
+    const client = await member.createCDPSession();
+    try {
+      client.on("Fetch.requestPaused", event => client.send("Fetch.failRequest", {
+        requestId: event.requestId, errorReason: "Failed",
+      }));
+      await client.send("Fetch.enable", {
+        patterns: [{ urlPattern: "*/api/v1" + home.slice(1), requestStage: "Request" }],
+      });
+      await button(member, "Refresh access").click();
+      await result(member, "Could not reach FlowForge");
+      assert.equal(await member.$eval("#workflow-json", input => input.value), unsaved);
+    } finally {
+      await client.detach();
+    }
+    await refresh();
+    await text(member, ".muted", "Unsaved edits");
+
+    await membership.bringToFront();
+    await membership.select('select[aria-label="Role for ' + accounts.developer.email + '"]', "VIEWER");
+    await result(membership, "Role updated.");
+    await member.bringToFront();
+    await refresh();
+    await member.waitForSelector("#workflow-json[readonly]");
+    assert.equal(await member.$$eval("button", buttons => buttons.some(item =>
+      item.textContent === "Save draft")), false);
+
+    await membership.bringToFront();
+    await button(membership, "Remove " + accounts.developer.email).click();
+    await button(membership, "Remove member").click();
+    await result(membership, "Member removed.");
+    await member.bringToFront();
+    await button(member, "Refresh access").click();
+    await result(member, "Project not found");
+    assert.equal(await member.$("#workflow-json"), null);
+    await membership.bringToFront();
+    await addMember(membership, accounts.developer.email, "DEVELOPER");
+  } finally {
+    await memberContext.close();
+    await membership.close();
+    await page.bringToFront();
+  }
+  console.log("PASS: access refresh preserves draft edits and handles role downgrade and revocation");
 }
 
 async function checkRefreshAndConflict(page, context, workflow) {
@@ -139,20 +213,13 @@ async function checkRefreshAndConflict(page, context, workflow) {
   console.log("PASS: two-tab refresh serialization and draft conflict recovery");
 }
 
-async function retryRunAfterLostResponse(page) {
-  const requests = [];
-  const watch = request => {
-    if (request.method() === "POST" && request.url().endsWith("/runs")) {
-      requests.push({ key: request.headers()["idempotency-key"], body: request.postData() });
-    }
-  };
-  page.on("request", watch);
+async function dropRunResponses(page, count, action) {
   const client = await page.createCDPSession();
-  let lost = false;
+  let lost = 0;
   try {
     client.on("Fetch.requestPaused", async event => {
-      if (!lost && event.request.method === "POST" && event.responseStatusCode === 202) {
-        lost = true;
+      if (lost < count && event.request.method === "POST" && event.responseStatusCode === 202) {
+        lost++;
         await client.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "Failed" });
       } else {
         await client.send("Fetch.continueRequest", { requestId: event.requestId });
@@ -161,20 +228,84 @@ async function retryRunAfterLostResponse(page) {
     await client.send("Fetch.enable", {
       patterns: [{ urlPattern: "*/api/v1/workflows/*/runs", requestStage: "Response" }],
     });
-    await start(page);
-    await result(page, "Run creation could not be confirmed");
-    assert.equal(lost, true);
-    await client.send("Fetch.disable");
-    await button(page, "Retry run request").click();
-    await text(page, "h2", "Tasks");
-    assert.equal(requests.length, 2);
-    assert(requests[0].key);
-    assert.deepEqual(requests[0], requests[1]);
+    await action();
+    assert.equal(lost, count);
   } finally {
-    page.off("request", watch);
     await client.detach();
   }
-  console.log("PASS: lost run response retried with the same key and payload");
+}
+
+async function retryRunAfterLostResponse(page) {
+  const requests = [];
+  const watch = request => {
+    if (request.method() === "POST" && request.url().endsWith("/runs")) {
+      requests.push({ key: request.headers()["idempotency-key"], body: request.postData() });
+    }
+  };
+  page.on("request", watch);
+  try {
+    await dropRunResponses(page, 2, async () => {
+      await start(page);
+      await result(page, "Run creation could not be confirmed");
+      await button(page, "Retry run request").click();
+      await result(page, "Run creation could not be confirmed");
+      await link(page, "Check run history").click();
+      await text(page, "h1", "Runs");
+      await page.waitForSelector("tbody a");
+      assert.equal(await page.$$eval("tbody tr", rows => rows.length), 1);
+      const original = await page.$eval("tbody a", item => item.hash);
+      await page.goBack();
+      await page.waitForSelector("#run-input-json[readonly]");
+      assert.deepEqual(JSON.parse(await page.$eval("#run-input-json", item => item.value)), input);
+      await page.reload();
+      await text(page, ".run-form h3", "version 1");
+      await button(page, "Retry run request").click();
+      await text(page, "h2", "Tasks");
+      assert.equal(new URL(page.url()).hash, original);
+    });
+    assert.equal(requests.length, 3);
+    assert(requests[0].key);
+    for (const request of requests.slice(1)) assert.deepEqual(request, requests[0]);
+  } finally {
+    page.off("request", watch);
+  }
+  console.log("PASS: direct retry, history and reload preserve the original run key and payload");
+}
+
+async function checkWorkflowPagination(page, home) {
+  const loginResponse = await fetch(origin + "/api/v1/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-FlowForge-CSRF": "1" },
+    body: JSON.stringify(accounts.owner),
+  });
+  assert.equal(loginResponse.status, 200);
+  const { access_token: accessToken } = await loginResponse.json();
+  const listing = origin + "/api/v1" + home.slice(1) + "/workflows";
+  for (let total = 2; total <= 40; total++) {
+    const create = await fetch(listing, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + accessToken },
+      body: JSON.stringify({ name: "Pagination workflow " + total }),
+    });
+    assert.equal(create.status, 201);
+    if (![19, 20, 21, 40].includes(total)) continue;
+    await page.goto(origin + "/" + home);
+    await page.reload();
+    await page.waitForFunction(count => document.querySelectorAll("tbody tr").length === count,
+      {}, Math.min(20, total));
+    assert.equal(await page.$eval(".pager button:last-child", item => item.disabled), total <= 20);
+    if (total <= 20) continue;
+    const first = await page.$$eval("tbody a", items => items.map(item => item.hash));
+    await button(page, "Next").click();
+    await text(page, ".pager", "Page 2");
+    const second = await page.$$eval("tbody a", items => items.map(item => item.hash));
+    assert.equal(second.length, total - 20);
+    assert.equal(new Set([...first, ...second]).size, total);
+    assert.equal(await page.$eval(".pager button:last-child", item => item.disabled), true);
+    await button(page, "Previous").click();
+    await text(page, ".pager", "Page 1");
+  }
+  console.log("PASS: pagination at 19, 20, 21 and 40 workflows");
 }
 
 async function full(page, ownerContext) {
@@ -189,8 +320,22 @@ async function full(page, ownerContext) {
   await addMember(page, accounts.viewer.email, "VIEWER");
   console.log("PASS: owner added members and updated project roles");
   const workflow = await createWorkflow(page, home);
+  const savedJson = await page.$eval("#workflow-json", input => input.value);
+  await editJson(page, "#workflow-json", "{");
+  await button(page, "Save draft").click();
+  await result(page, "Enter a valid JSON object.");
+  await page.focus("details summary");
+  await page.keyboard.press("Enter");
+  await button(page, "Use saved JSON").click();
+  assert.equal(await page.$eval("#workflow-json", input => input.value), savedJson);
+  assert.equal(await page.$(".notice.error"), null);
+  await checkAccessRefresh(page, ownerContext, home, workflow);
   await checkRefreshAndConflict(page, ownerContext, workflow);
   await publish(page, 1);
+  await save(page, { ...example, edges: [...example.edges, ["report", "validate"]] });
+  await button(page, "Publish version").click();
+  await result(page, "workflow contains a cycle");
+  assert.equal(await page.$$eval("tbody tr", rows => rows.length), 1);
   await save(page, { ...example, nodes: example.nodes.slice(0, 1), edges: [] });
   await publish(page, 2);
   await button(page, "View version 1").click();
@@ -199,9 +344,23 @@ async function full(page, ownerContext) {
   const run = new URL(page.url()).hash;
   await text(page, '[role="status"]', "SUCCEEDED", 60000);
   assert.equal(await page.$$eval(".dag-node", nodes => nodes.length), example.nodes.length);
-  await button(page, "Attempts for validate").click();
-  await text(page, "h2", "Attempts · validate");
-  await text(page, "tbody td", "#1");
+  for (const { key } of example.nodes) {
+    await openAttempts(page, key);
+    await text(page, "#attempt-history tbody td", "#1");
+  }
+  await page.goto(origin + "/" + workflow);
+  await button(page, "View version 1").click();
+  await text(page, "h2", "Published version 1");
+  await button(page, "Start run").click();
+  await result(page, "Run input does not resolve");
+  assert.equal(await page.$("#run-input-json[readonly]"), null);
+  const freshRequest = page.waitForResponse(response =>
+    response.request().method() === "POST" && response.url().endsWith("/runs"),
+  );
+  await start(page);
+  assert.equal((await freshRequest).status(), 202);
+  await text(page, "h2", "Tasks");
+  assert.notEqual(new URL(page.url()).hash, run);
 
   const viewerContext = await browser.createBrowserContext();
   try {
@@ -209,8 +368,8 @@ async function full(page, ownerContext) {
     await viewer.bringToFront();
     await login(viewer, accounts.viewer, run);
     await text(viewer, '[role="status"]', "SUCCEEDED");
-    await button(viewer, "Attempts for validate").click();
-    await text(viewer, "tbody td", "#1");
+    await openAttempts(viewer, "validate");
+    await text(viewer, "#attempt-history tbody td", "#1");
     await viewer.goto(origin + "/" + workflow);
     await viewer.waitForSelector("textarea[readonly]");
     assert.equal(await viewer.$$eval("button", buttons => buttons.some(item =>
@@ -232,7 +391,7 @@ async function full(page, ownerContext) {
 
   await page.goto(origin + "/" + home + "/runs?workflow=" + workflow.split("/").at(-1));
   await page.waitForSelector("tbody td");
-  assert.equal(await page.$$eval("tbody tr", rows => rows.length), 1);
+  assert.equal(await page.$$eval("tbody tr", rows => rows.length), 2);
   await page.setViewport({ width: 390, height: 844 });
   await page.goto(origin + "/" + run);
   await page.reload();
@@ -243,8 +402,25 @@ async function full(page, ownerContext) {
   assert(await page.evaluate(() => document.activeElement?.textContent === "Skip to content"));
   await page.keyboard.press("Enter");
   assert(await page.evaluate(() => document.activeElement?.id === "dashboard-content"));
+  await openAttempts(page, "report");
+  await text(page, "#attempt-history tbody td", "#1");
+  await openAttempts(page, "report");
+  await page.setViewport({ width: 1280, height: 900 });
+  await checkWorkflowPagination(page, home);
+  await page.goto(origin + "/" + workflow);
+  await dropRunResponses(page, 1, async () => {
+    await start(page);
+    await result(page, "Run creation could not be confirmed");
+  });
   await button(page, "Sign out").click();
   await text(page, "h2", "Sign in");
+  for (const account of [accounts.developer, accounts.owner]) {
+    await login(page, account, workflow);
+    await page.waitForSelector("#run-input-json");
+    assert.equal(await page.$eval("#run-input-json", item => item.value), "{}");
+    await button(page, "Sign out").click();
+    await text(page, "h2", "Sign in");
+  }
   console.log("PASS: project membership, versioned DAG, run history, attempts, keyboard and mobile");
 }
 
@@ -256,10 +432,13 @@ async function cancellation(page) {
   await start(page);
   await text(page, '[role="status"]', "PENDING");
   await button(page, "Cancel run").click();
+  await button(page, "Keep").click();
+  assert.equal(await page.$(".confirm"), null);
+  await button(page, "Cancel run").click();
   await button(page, "Confirm cancellation").click();
   await result(page, "Run status: CANCELED.");
   await text(page, "tbody td", "CANCELED");
-  await button(page, "Attempts for validate").click();
+  await openAttempts(page, "validate");
   await text(page, ".empty", "no attempts yet");
   console.log("PASS: browser cancellation preserves zero attempts for an unstarted run");
 }

@@ -1,26 +1,36 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { api, errorText, isAbort } from "./api";
+import { api, ApiError, errorText, isAbort } from "./api";
 
 export const pageSize = 20;
 
-export function useLoad<T>(path: string, revision = 0) {
-  const [result, setResult] = useState<{
-    path: string; revision: number; data?: T; error?: string;
-  }>();
+type LoadResult<T> = {
+  path: string; revision: number; data?: T; error?: string; refreshing?: boolean;
+};
+
+export function useLoad<T>(path: string, revision = 0, keepData = false): LoadResult<T> | undefined {
+  const [result, setResult] = useState<LoadResult<T>>();
   useEffect(() => {
     const controller = new AbortController();
     api<T>(path, { signal: controller.signal }).then(
       data => { if (!controller.signal.aborted) setResult({ path, revision, data }); },
       error => {
         if (!isAbort(error) && !controller.signal.aborted) {
-          setResult({ path, revision, error: errorText(error) });
+          const denied = error instanceof ApiError && [401, 403, 404].includes(error.status);
+          setResult(previous => ({
+            path, revision, error: errorText(error),
+            data: keepData && !denied && previous?.path === path ? previous.data : undefined,
+          }));
         }
       },
     );
     return () => controller.abort();
-  }, [path, revision]);
-  return result?.path === path && result.revision === revision ? result : undefined;
+  }, [path, revision, keepData]);
+  if (result?.path !== path) return;
+  if (result.revision === revision) return result;
+  if (keepData && result.data !== undefined) {
+    return { path, revision, data: result.data, refreshing: true };
+  }
 }
 
 export function PageTitle({ title, description, action }: {
@@ -42,7 +52,7 @@ export function Pager({ offset, count, setOffset }: {
   return <nav className="pager" aria-label="Pagination">
     <button className="secondary" disabled={!offset} onClick={() => setOffset(offset - pageSize)}>Previous</button>
     <span>Page {offset / pageSize + 1}</span>
-    <button className="secondary" disabled={count < pageSize} onClick={() => setOffset(offset + pageSize)}>Next</button>
+    <button className="secondary" disabled={count <= pageSize} onClick={() => setOffset(offset + pageSize)}>Next</button>
   </nav>;
 }
 
@@ -69,7 +79,7 @@ export function date(value: string | null) {
 export const projectPath = (id: string) => "#/projects/" + id;
 
 export function listPath(path: string, offset: number, filters: Record<string, string> = {}) {
-  const params = new URLSearchParams({ limit: String(pageSize), offset: String(offset) });
+  const params = new URLSearchParams({ limit: String(pageSize + 1), offset: String(offset) });
   for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value);
   return path + "?" + params;
 }

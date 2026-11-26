@@ -22,6 +22,9 @@ Publication expands defaults, sorts nodes by key and edges lexically, and hashes
 
 Writes lock session, project, then workflow; authorization is re-read after the project lock. Draft revision comparison, validation, number allocation and insertion happen within the transaction. A failed publication consumes no version. PostgreSQL unique constraints prevent duplicate numbers and a trigger rejects UPDATE/DELETE of published versions. There is no delete/archive API. Downgrade drops the workflow tables and must only be exercised on disposable test databases.
 
+A draft that fails publication validation returns `422 WORKFLOW_INVALID`. Its `details` entries
+contain `loc` (the path in the draft prefixed by `dag`), `type` and a user-facing `message`.
+
 ## Trusted handler contracts v1
 
 All payload schemas are strict and reject extra fields. Binding names must match the input model fields exactly. JSON Pointer syntax and ancestry are checked at publication; resolved values/types are validated when handlers execute in the later worker milestone.

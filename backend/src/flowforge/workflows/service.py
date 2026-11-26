@@ -2,6 +2,7 @@ import json
 from typing import Any
 from uuid import UUID, uuid4
 
+from pydantic import ValidationError
 from sqlalchemy import RowMapping, text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
@@ -9,7 +10,7 @@ from flowforge.auth.service import Principal
 from flowforge.errors import ApiError
 from flowforge.projects.service import visible
 
-from .publication import snapshot
+from .publication import InvalidHandlerBindings, snapshot
 
 EDITORS = ("OWNER", "DEVELOPER")
 
@@ -162,8 +163,24 @@ async def publish(
             raise ApiError(409, "DRAFT_REVISION_CONFLICT", "Reload the current draft")
         try:
             dag, contracts, checksum = snapshot(decoded(row)["dag"])
-        except ValueError as exc:
-            raise ApiError(422, "WORKFLOW_INVALID", "Draft cannot be published") from exc
+        except ValidationError as exc:
+            raise ApiError(
+                422, "WORKFLOW_INVALID", "Draft cannot be published",
+                details=[
+                    {"loc": ["dag", *error["loc"]], "type": error["type"], "message": error["msg"]}
+                    for error in exc.errors(include_input=False, include_context=False,
+                                            include_url=False)
+                ],
+            ) from exc
+        except InvalidHandlerBindings as exc:
+            raise ApiError(
+                422, "WORKFLOW_INVALID", "Draft cannot be published",
+                details=[{
+                    "loc": ["dag", "nodes", exc.node_index, "inputs"],
+                    "type": "invalid_handler_bindings",
+                    "message": str(exc),
+                }],
+            ) from exc
         version = await conn.scalar(
             text("""SELECT coalesce(max(version),0)+1
           FROM workflow_versions WHERE workflow_id=:id"""),
