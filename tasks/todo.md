@@ -20,7 +20,7 @@
 - [x] Real broker/DB shutdown-restart outage drill (2026-11-15, sau restart)
 - [x] Full isolated Compose smoke, migration rollback/upgrade, SIGTERM, logs and cleanup
 - [x] Clean local snapshot clone + fresh dependency install rehearsal (không phải remote clone)
-- [ ] Fresh remote clone rehearsal after commit/push
+- [x] Fresh HTTPS clone from GitHub at `83c2a96`, frozen installs, local checks and Full Compose smoke
 
 ## Core engine tiếp theo
 - [x] Auth, bootstrap-user, project membership, cross-project tests (nghiệm thu local 2026-11-16)
@@ -39,7 +39,10 @@
 - [x] Cancellation API, race tests và hai ca Worker crash/redelivery
 - [x] Full Compose smoke local và hai lượt GitLab smoke tại `05d7e7c` trên nhánh cancellation, 139 tests mỗi lượt (3087655516, 3087682148)
 - [x] Dashboard workflow/run/attempt, DAG chỉ đọc, bảng task và quản lý thành viên
-- [ ] Full Compose smoke dashboard local và hai lượt GitLab smoke cùng SHA
+- [x] Full Compose smoke dashboard local và hai lượt GitLab smoke tại `7d1f8d7`, 141 tests/lượt ([push](https://gitlab.com/hung-it/flow_forge/-/pipelines/3087808351), [thủ công](https://gitlab.com/hung-it/flow_forge/-/pipelines/3092756699))
 - [x] Metrics labels, trace context qua PostgreSQL/RabbitMQ và dashboard Grafana/Jaeger
-- [ ] Full Compose observability local và hai lượt GitLab smoke cùng SHA
-- [ ] Benchmark 1.000 task và release video
+- [x] Full Compose observability local và hai lượt GitLab smoke tại `83c2a96`, 146 tests/lượt ([push](https://gitlab.com/hung-it/flow_forge/-/pipelines/3089037648), [thủ công](https://gitlab.com/hung-it/flow_forge/-/pipelines/3092757680))
+- [x] Time-bounded recovery, stale-attempt fencing, commit-before-ACK redelivery và low-cardinality metrics trong phạm vi test đã ghi
+- [x] 1.000 task mỗi lượt, 3 baseline và 1 Worker fault với 4 Worker ([benchmark](../docs/development/benchmark.md))
+- [x] Video demo từ stack chạy thật ([MP4](https://github.com/hung-it/Flow_Forge/releases/download/v1.0.0/flowforge-demo.mp4))
+- Bằng chứng phát hành tại [GitHub v1.0.0](https://github.com/hung-it/Flow_Forge/releases/tag/v1.0.0) và [GitLab tag pipeline](https://gitlab.com/hung-it/flow_forge/-/pipelines?ref=v1.0.0).

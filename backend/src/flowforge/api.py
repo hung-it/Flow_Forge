@@ -151,7 +151,7 @@ def create_app() -> FastAPI:
         finally:
             await app.state.engine.dispose()
 
-    app = FastAPI(title="FlowForge", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="FlowForge", version="1.0.0", lifespan=lifespan)
     app.add_middleware(AuthBodyLimit)
     app.include_router(auth_router)
     app.include_router(projects_router)
